@@ -1,0 +1,14 @@
+{
+  "name": "Examples Server for Leaflet.CanvasDataGrid",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "Mikhail Kotelnikov",
+  "license": "ISC",
+  "dependencies": {
+    "send": "^0.13.0"
+  }
+}
