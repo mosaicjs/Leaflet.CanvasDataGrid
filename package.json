@@ -1,9 +1,9 @@
 {
-  "name": "leaflet.datalayer",
+  "name": "Leaflet.TileLayer.CanvasDataGrid",
   "version": "0.0.5",
   "description": "Leaflet data layer rendering information on canvas tiles",
-  "homepage": "https://github.com/ubimix/leaflet.datalayer",
-  "appname": "leaflet.datalayer",
+  "homepage": "https://github.com/mosaicjs/Leaflet.TileLayer.CanvasDataGrid",
+  "appname": "Leaflet.TileLayer.CanvasDataGrid",
   "licenses": [
     {
       "type": "MIT"
@@ -21,9 +21,7 @@
     "bump-minor": "npm run bump && npm version minor && git push && git push --tags && npm publish",
     "commit": "npm test && webpack && git commit -a"
   },
-  "keywords": [
-    "list visualisation"
-  ],
+  "keywords": [],
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/mosaicjs/mosaic-ui-list/issues"

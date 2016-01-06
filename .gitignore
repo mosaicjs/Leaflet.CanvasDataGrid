@@ -2,3 +2,4 @@ node_modules
 libs
 /sandbox
 /examples-pnr
+*.log
