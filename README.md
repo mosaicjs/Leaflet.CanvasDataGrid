@@ -12,29 +12,30 @@
 ## Data Layer
 
 This Leaflet plugin allows to visualize data on maps using HTML Canvas tiles.
-It is available under the MIT license. 
+It is available under the MIT license.
 
 ### Requirements
 
-Leaflet v1.0.0-beta2
+* Leaflet v1.0.0-beta2
+* Librairies needed on a Debian-based operating system: cairo, libpango1.0-dev, libjpeg-dev, libgif-dev
 
 ### Demo
 
 ### Installation
 
-> npm install 
+> npm install
 
 ### Examples
 
 ### API references
 
 * CanvasTools - a set of methods used to draw images, lines and polygons on canvas
-  TODO: replace "clipLine", "clipLines", "clipPolygon" by "turf.intersect" 
-  TODO: replace "simplify" method by "turf.simplify" 
+  TODO: replace "clipLine", "clipLines", "clipPolygon" by "turf.intersect"
+  TODO: replace "simplify" method by "turf.simplify"
     * CanvasContext - a generic class allowing to associate data with images
       and geometries drawn on canvas.
       TODO: data indexing code should be externalized to a GridIndex class
 * DataLayer - a Leaflet layer visualizing data on canvas tiles.
   - use IDataProvider instances to load data associated with individual tiles
   - use DataRenderer to visualize loaded objects
-* DataRenderer - visualize individual GeoJSON features on the canvas 
+* DataRenderer - visualize individual GeoJSON features on the canvas
