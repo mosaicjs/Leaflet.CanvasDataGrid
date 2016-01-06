@@ -1,6 +1,6 @@
 {
   "name": "leaflet.tilelayer.canvasdatagrid",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Leaflet data layer rendering information on canvas tiles",
   "homepage": "https://github.com/mosaicjs/Leaflet.TileLayer.CanvasDataGrid",
   "appname": "Leaflet.TileLayer.CanvasDataGrid",
