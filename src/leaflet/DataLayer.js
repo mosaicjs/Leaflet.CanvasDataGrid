@@ -1,9 +1,7 @@
 var L = require('leaflet');
-var Utils = require('./utils');
-
-var CanvasContext = require('./canvas/CanvasContext');
-var CanvasIndexingContext = require('./canvas/CanvasIndexingContext');
-var GeometryRenderer = require('./geo/GeometryRenderer');
+// var CanvasContext = require('../canvas/CanvasContext');
+var CanvasIndexingContext = require('../canvas/CanvasIndexingContext');
+var GeometryRenderer = require('../canvas/GeometryRenderer');
 
 /**
  * This layer draws data on canvas tiles.

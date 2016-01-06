@@ -1,9 +1,9 @@
 var L = require('leaflet');
-L.DataLayer = require('./src/DataLayer');
+L.DataLayer = require('./src/leaflet/DataLayer');
 L.DataLayer.CanvasContext = require('./src/canvas/CanvasContext');
 L.DataLayer.CanvasIndexingContext = require('./src/canvas/CanvasIndexingContext');
-L.DataLayer.GeometryRenderer = require('./src/geo/GeometryRenderer');
-L.DataLayer.GeometryRendererStyle = require('./src/geo/GeometryRendererStyle');
-L.DataLayer.IDataProvider = require('./src/IDataProvider');
-L.DataLayer.DataProvider = require('./src/DataProvider');
+L.DataLayer.GeometryRenderer = require('./src/canvas/GeometryRenderer');
+L.DataLayer.GeometryRendererStyle = require('./src/canvas/GeometryRendererStyle');
+L.DataLayer.IDataProvider = require('./src/data/IDataProvider');
+L.DataLayer.DataProvider = require('./src/data/DataProvider');
 module.exports = L.DataLayer;

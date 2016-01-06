@@ -1,4 +1,4 @@
-var Utils = require('../utils');
+var extend = require('./extend');
 
 /**
  * A common interface visualizing data on canvas.
@@ -6,7 +6,7 @@ var Utils = require('../utils');
 function GeometryRenderer() {
     this.initialize.apply(this, arguments);
 }
-Utils.extend(GeometryRenderer.prototype, {
+extend(GeometryRenderer.prototype, {
 
     /** Initializes fields of this object. */
     initialize : function(options) {

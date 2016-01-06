@@ -1,4 +1,4 @@
-var Utils = require('../utils');
+var extend = require('./extend');
 var CanvasContext = require('./CanvasContext');
 var ImageGridIndex = require('./ImageGridIndex');
 
@@ -10,8 +10,8 @@ function CanvasIndexingContext() {
     CanvasContext.apply(this, arguments);
 }
 CanvasIndexingContext.stampImage = ImageGridIndex.stampImage;
-Utils.extend(CanvasIndexingContext, CanvasContext);
-Utils.extend(CanvasIndexingContext.prototype, CanvasContext.prototype, {
+extend(CanvasIndexingContext, CanvasContext);
+extend(CanvasIndexingContext.prototype, CanvasContext.prototype, {
 
     /**
      * Initializes internal fields of this class.
@@ -36,7 +36,6 @@ Utils.extend(CanvasIndexingContext.prototype, CanvasContext.prototype, {
      * Draws the specified image in the given position on the underlying canvas.
      */
     drawImage : function(image, position, options) {
-        console.log('*** ', image, position, options);
         if (!image || !position)
             return;
         var x = position[0];

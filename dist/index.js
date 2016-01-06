@@ -58,8 +58,8 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	var L = __webpack_require__(1);
 	L.DataLayer = __webpack_require__(2);
-	L.DataLayer.CanvasContext = __webpack_require__(4);
-	L.DataLayer.CanvasIndexingContext = __webpack_require__(6);
+	L.DataLayer.CanvasContext = __webpack_require__(5);
+	L.DataLayer.CanvasIndexingContext = __webpack_require__(3);
 	L.DataLayer.GeometryRenderer = __webpack_require__(9);
 	L.DataLayer.GeometryRendererStyle = __webpack_require__(10);
 	L.DataLayer.IDataProvider = __webpack_require__(11);
@@ -77,10 +77,8 @@ return /******/ (function(modules) { // webpackBootstrap
 /***/ function(module, exports, __webpack_require__) {
 
 	var L = __webpack_require__(1);
-	var Utils = __webpack_require__(3);
-
-	var CanvasContext = __webpack_require__(4);
-	var CanvasIndexingContext = __webpack_require__(6);
+	// var CanvasContext = require('../canvas/CanvasContext');
+	var CanvasIndexingContext = __webpack_require__(3);
 	var GeometryRenderer = __webpack_require__(9);
 
 	/**
@@ -259,27 +257,140 @@ return /******/ (function(modules) { // webpackBootstrap
 
 /***/ },
 /* 3 */
-/***/ function(module, exports) {
+/***/ function(module, exports, __webpack_require__) {
 
-	module.exports = {
-	    extend : function extend(to) {
-	        var len = arguments.length;
-	        for (var i = 1; i < len; i++) {
-	            var from = arguments[i];
-	            for ( var key in from) {
-	                if (from.hasOwnProperty(key)) {
-	                    to[key] = from[key];
-	                }
-	            }
+	var extend = __webpack_require__(4);
+	var CanvasContext = __webpack_require__(5);
+	var ImageGridIndex = __webpack_require__(7);
+
+	/**
+	 * This utility class allows to associate data with non-transparent pixels of
+	 * images drawn on canvas.
+	 */
+	function CanvasIndexingContext() {
+	    CanvasContext.apply(this, arguments);
+	}
+	CanvasIndexingContext.stampImage = ImageGridIndex.stampImage;
+	extend(CanvasIndexingContext, CanvasContext);
+	extend(CanvasIndexingContext.prototype, CanvasContext.prototype, {
+
+	    /**
+	     * Initializes internal fields of this class.
+	     * 
+	     * @param options.canvas
+	     *            mandatory canvas object used to draw images
+	     * @param options.resolution
+	     *            optional resolution field defining precision of image areas
+	     *            associated with data; by default it is 4x4 pixel areas
+	     *            (resolution = 4)
+	     */
+	    initialize : function(options) {
+	        CanvasContext.prototype.initialize.apply(this, arguments);
+	        // Re-define a method returning unique image identifiers.
+	        if (typeof this.options.getImageKey === 'function') {
+	            this.getImageKey = this.options.getImageKey;
 	        }
-	    }
-	};
+	        this.index = new ImageGridIndex(options);
+	    },
+
+	    /**
+	     * Draws the specified image in the given position on the underlying canvas.
+	     */
+	    drawImage : function(image, position, options) {
+	        if (!image || !position)
+	            return;
+	        var x = position[0];
+	        var y = position[1];
+	        // Draw the image on the canvas
+	        this._context.drawImage(image, x, y);
+	        // Associate non-transparent pixels of the image with data
+	        this.index.indexImage(image, x, y, options);
+	    },
+
+	    _drawOnCanvasContext : function(options, f) {
+	        // Create new canvas where the polygon should be drawn
+	        var canvas = this._newCanvas();
+	        var g = canvas.getContext('2d');
+	        var ok = f.call(this, g);
+	        if (ok) {
+	            this.drawImage(canvas, [ 0, 0 ], options);
+	        }
+	    },
+
+	    /**
+	     * Creates and returns a new canvas used to draw individual features.
+	     */
+	    _newCanvas : function() {
+	        var canvas;
+	        var width = this._canvas.width;
+	        var height = this._canvas.height;
+	        if (this.options.newCanvas) {
+	            canvas = this.options.newCanvas(width, height);
+	        } else {
+	            canvas = document.createElement('canvas');
+	            canvas.width = width;
+	            canvas.height = height;
+	        }
+	        return canvas;
+	    },
+
+	    /**
+	     * Returns data associated with the specified position on the canvas.
+	     */
+	    getData : function(x, y) {
+	        return this.index.getData(x, y);
+	    },
+
+	    /**
+	     * Returns all data objects associated with the specified position on the
+	     * canvas.
+	     */
+	    getAllData : function(x, y) {
+	        return this.index.getAllData(x, y);
+	    },
+
+	    /**
+	     * Sets data in the specified position on the canvas.
+	     */
+	    setData : function(x, y, data) {
+	        return this.index.setData(x, y, data);
+	    },
+
+	    /**
+	     * Removes all data from internal indexes and cleans up underlying canvas.
+	     */
+	    reset : function() {
+	        var g = this._context;
+	        g.clearRect(0, 0, this._canvas.width, this._canvas.height);
+	        this.index.reset();
+	    },
+
+	});
+	module.exports = CanvasIndexingContext;
+
 
 /***/ },
 /* 4 */
+/***/ function(module, exports) {
+
+	module.exports = function extend(to) {
+	    var len = arguments.length;
+	    for (var i = 1; i < len; i++) {
+	        var from = arguments[i];
+	        for ( var key in from) {
+	            if (from.hasOwnProperty(key)) {
+	                to[key] = from[key];
+	            }
+	        }
+	    }
+	}
+
+
+/***/ },
+/* 5 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var simplify = __webpack_require__(5);
+	var simplify = __webpack_require__(6);
 
 	/**
 	 * This class provides a set of utility methods simplifying data visualization
@@ -512,7 +623,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 5 */
+/* 6 */
 /***/ function(module, exports, __webpack_require__) {
 
 	var __WEBPACK_AMD_DEFINE_RESULT__;/*
@@ -649,131 +760,16 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 6 */
-/***/ function(module, exports, __webpack_require__) {
-
-	var Utils = __webpack_require__(3);
-	var CanvasContext = __webpack_require__(4);
-	var ImageGridIndex = __webpack_require__(7);
-
-	/**
-	 * This utility class allows to associate data with non-transparent pixels of
-	 * images drawn on canvas.
-	 */
-	function CanvasIndexingContext() {
-	    CanvasContext.apply(this, arguments);
-	}
-	CanvasIndexingContext.stampImage = ImageGridIndex.stampImage;
-	Utils.extend(CanvasIndexingContext, CanvasContext);
-	Utils.extend(CanvasIndexingContext.prototype, CanvasContext.prototype, {
-
-	    /**
-	     * Initializes internal fields of this class.
-	     * 
-	     * @param options.canvas
-	     *            mandatory canvas object used to draw images
-	     * @param options.resolution
-	     *            optional resolution field defining precision of image areas
-	     *            associated with data; by default it is 4x4 pixel areas
-	     *            (resolution = 4)
-	     */
-	    initialize : function(options) {
-	        CanvasContext.prototype.initialize.apply(this, arguments);
-	        // Re-define a method returning unique image identifiers.
-	        if (typeof this.options.getImageKey === 'function') {
-	            this.getImageKey = this.options.getImageKey;
-	        }
-	        this.index = new ImageGridIndex(options);
-	    },
-
-	    /**
-	     * Draws the specified image in the given position on the underlying canvas.
-	     */
-	    drawImage : function(image, position, options) {
-	        console.log('*** ', image, position, options);
-	        if (!image || !position)
-	            return;
-	        var x = position[0];
-	        var y = position[1];
-	        // Draw the image on the canvas
-	        this._context.drawImage(image, x, y);
-	        // Associate non-transparent pixels of the image with data
-	        this.index.indexImage(image, x, y, options);
-	    },
-
-	    _drawOnCanvasContext : function(options, f) {
-	        // Create new canvas where the polygon should be drawn
-	        var canvas = this._newCanvas();
-	        var g = canvas.getContext('2d');
-	        var ok = f.call(this, g);
-	        if (ok) {
-	            this.drawImage(canvas, [ 0, 0 ], options);
-	        }
-	    },
-
-	    /**
-	     * Creates and returns a new canvas used to draw individual features.
-	     */
-	    _newCanvas : function() {
-	        var canvas;
-	        var width = this._canvas.width;
-	        var height = this._canvas.height;
-	        if (this.options.newCanvas) {
-	            canvas = this.options.newCanvas(width, height);
-	        } else {
-	            canvas = document.createElement('canvas');
-	            canvas.width = width;
-	            canvas.height = height;
-	        }
-	        return canvas;
-	    },
-
-	    /**
-	     * Returns data associated with the specified position on the canvas.
-	     */
-	    getData : function(x, y) {
-	        return this.index.getData(x, y);
-	    },
-
-	    /**
-	     * Returns all data objects associated with the specified position on the
-	     * canvas.
-	     */
-	    getAllData : function(x, y) {
-	        return this.index.getAllData(x, y);
-	    },
-
-	    /**
-	     * Sets data in the specified position on the canvas.
-	     */
-	    setData : function(x, y, data) {
-	        return this.index.setData(x, y, data);
-	    },
-
-	    /**
-	     * Removes all data from internal indexes and cleans up underlying canvas.
-	     */
-	    reset : function() {
-	        var g = this._context;
-	        g.clearRect(0, 0, this._canvas.width, this._canvas.height);
-	        this.index.reset();
-	    },
-
-	});
-	module.exports = CanvasIndexingContext;
-
-
-/***/ },
 /* 7 */
 /***/ function(module, exports, __webpack_require__) {
 
 	var GridIndex = __webpack_require__(8);
-	var Utils = __webpack_require__(3);
+	var extend = __webpack_require__(4);
 
 	function ImageGridIndex() {
 	    GridIndex.apply(this, arguments);
 	}
-	Utils.extend(ImageGridIndex.prototype, GridIndex.prototype, {
+	extend(ImageGridIndex.prototype, GridIndex.prototype, {
 
 	    /**
 	     * Adds all pixels occupied by the specified image to a data mask associated
@@ -1021,7 +1017,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /* 9 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var Utils = __webpack_require__(3);
+	var extend = __webpack_require__(4);
 
 	/**
 	 * A common interface visualizing data on canvas.
@@ -1029,7 +1025,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	function GeometryRenderer() {
 	    this.initialize.apply(this, arguments);
 	}
-	Utils.extend(GeometryRenderer.prototype, {
+	extend(GeometryRenderer.prototype, {
 
 	    /** Initializes fields of this object. */
 	    initialize : function(options) {
@@ -1264,12 +1260,12 @@ return /******/ (function(modules) { // webpackBootstrap
 /* 10 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var Utils = __webpack_require__(3);
+	var extend = __webpack_require__(4);
 
 	function GeometryRenderStyle(options) {
 	    this.initialize(options);
 	}
-	Utils.extend(GeometryRenderStyle.prototype, {
+	extend(GeometryRenderStyle.prototype, {
 
 	    initialize : function(options) {
 	        this.options = options || {};
@@ -1355,17 +1351,15 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	var rbush = __webpack_require__(13);
 	var TurfExtent = __webpack_require__(14);
-	var IDataProvider = __webpack_require__(11);
-	var Utils = __webpack_require__(3);
 
 	/**
 	 * A simple data provider synchronously indexing the given data using an RTree
 	 * index.
 	 */
 	function DataProvider() {
-	    IDataProvider.apply(this, arguments);
+	    this.initialize.apply(this, arguments);
 	}
-	Utils.extend(DataProvider.prototype, IDataProvider.prototype, {
+	DataProvider.prototype = {
 
 	    /** Initializes this object and indexes the initial data set. */
 	    initialize : function(options) {
@@ -1436,20 +1430,22 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * This method transforms a bounding box into a key for RTree index.
 	     */
 	    _toIndexKey : function(bbox) {
-	        bbox = bbox.map(function(v){ return +v; });
+	        bbox = bbox.map(function(v) {
+	            return +v;
+	        });
 	        return bbox;
 	    },
 
 	    /**
-	     * Returns an object defining a bounding box ([south, west, north,
-	     * east]) for the specified resource.
+	     * Returns an object defining a bounding box ([south, west, north, east])
+	     * for the specified resource.
 	     */
 	    _getBoundingBox : function(d) {
 	        var bbox = d ? TurfExtent(d) : null;
 	        return bbox;
 	    }
 
-	});
+	};
 
 	module.exports = DataProvider;
 

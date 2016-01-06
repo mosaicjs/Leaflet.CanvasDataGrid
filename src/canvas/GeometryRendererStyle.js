@@ -1,9 +1,9 @@
-var Utils = require('../utils');
+var extend = require('./extend');
 
 function GeometryRenderStyle(options) {
     this.initialize(options);
 }
-Utils.extend(GeometryRenderStyle.prototype, {
+extend(GeometryRenderStyle.prototype, {
 
     initialize : function(options) {
         this.options = options || {};

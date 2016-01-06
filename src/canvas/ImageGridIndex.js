@@ -1,10 +1,10 @@
-var GridIndex = require('./GridIndex');
-var Utils = require('../utils');
+var GridIndex = require('../data/GridIndex');
+var extend = require('./extend');
 
 function ImageGridIndex() {
     GridIndex.apply(this, arguments);
 }
-Utils.extend(ImageGridIndex.prototype, GridIndex.prototype, {
+extend(ImageGridIndex.prototype, GridIndex.prototype, {
 
     /**
      * Adds all pixels occupied by the specified image to a data mask associated

@@ -1,16 +1,14 @@
 var rbush = require('rbush');
 var TurfExtent = require('turf-extent');
-var IDataProvider = require('./IDataProvider');
-var Utils = require('./utils');
 
 /**
  * A simple data provider synchronously indexing the given data using an RTree
  * index.
  */
 function DataProvider() {
-    IDataProvider.apply(this, arguments);
+    this.initialize.apply(this, arguments);
 }
-Utils.extend(DataProvider.prototype, IDataProvider.prototype, {
+DataProvider.prototype = {
 
     /** Initializes this object and indexes the initial data set. */
     initialize : function(options) {
@@ -81,19 +79,21 @@ Utils.extend(DataProvider.prototype, IDataProvider.prototype, {
      * This method transforms a bounding box into a key for RTree index.
      */
     _toIndexKey : function(bbox) {
-        bbox = bbox.map(function(v){ return +v; });
+        bbox = bbox.map(function(v) {
+            return +v;
+        });
         return bbox;
     },
 
     /**
-     * Returns an object defining a bounding box ([south, west, north,
-     * east]) for the specified resource.
+     * Returns an object defining a bounding box ([south, west, north, east])
+     * for the specified resource.
      */
     _getBoundingBox : function(d) {
         var bbox = d ? TurfExtent(d) : null;
         return bbox;
     }
 
-});
+};
 
 module.exports = DataProvider;
