@@ -119,7 +119,7 @@ function newMuseumsLayer(data) {
         provider : provider
     });
     dataLayer.on('mousemove', function(ev) {
-        console.log('mousemove', ev.data);
+//        console.log('mousemove', ev.data);
     })
     return dataLayer;
 }

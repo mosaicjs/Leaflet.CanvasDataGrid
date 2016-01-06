@@ -13,21 +13,13 @@ var DataLayer = ParentLayer.extend({
         ParentLayer.prototype.onAdd.apply(this, arguments);
         this._map.on('mousemove', this._onMouseMove, this);
         this._map.on('click', this._onClick, this);
-
-        this.on('tileunload', function(ev) {
-            var el = ev.tile;
-            el.style.display = 'none';
-            if (el.parentNode) {
-                el.parentNode.removeChild(el);
-            }
-        }, this);
-        this.on('tileload', function(ev) {
-            var el = ev.tile;
-            el.style.display = 'block';
-        }, this);
+        this._map.on('zoomstart', this._onZoomStart, this);
+        this._map.on('zoomend', this._onZoomEnd, this);
     },
 
     onRemove : function() {
+        this._map.off('zoomend', this._onZoomEnd, this);
+        this._map.off('zoomstart', this._onZoomStart, this);
         this._map.off('click', this._onClick, this);
         this._map.off('mousemove', this._onMouseMove, this);
         ParentLayer.prototype.onRemove.apply(this, arguments);
@@ -107,10 +99,30 @@ var DataLayer = ParentLayer.extend({
             }
             setTimeout(function() {
                 done(null, canvas);
-            }, 100);
+            }, 1);
         }.bind(this));
 
         return canvas;
+    },
+
+    _update : function() {
+        ParentLayer.prototype._update.apply(this, arguments);
+    },
+
+    _onZoomStart : function(ev) {
+        this._prevLevel = this._level;
+    },
+    _onZoomEnd : function(ev) {
+        if (this._prevLevel && this._prevLevel.zoom !== this._level.zoom) {
+            setTimeout(function() {
+                if (!this._prevLevel)
+                    return;
+                if (this._prevLevel.zoom === this._map.getZoom())
+                    return;
+                L.DomUtil.remove(this._prevLevel.el);
+                delete this._prevLevel;
+            }.bind(this), 10);
+        }
     },
 
     _getTilePad : function() {
