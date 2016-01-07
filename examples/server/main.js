@@ -31,15 +31,33 @@ function main(id) {
     });
     map.addLayer(tilesLayer);
 
+    function getGeometry(r) {
+        return r.x.geometry;
+    }
+    function getProperties(r) {
+        return r.x.properties;
+    }
     // Load data and transform them into markers with basic interactivity
     // DATA object is defined in the './data.js' script.
-    var museumsLayer = newMuseumsLayer(DATA.features);
+    var options = {
+        data : {
+            forEach : function(callback) {
+                for (var i = 0; i < DATA.features.length; i++) {
+                    callback({
+                        x : DATA.features[i]
+                    }, i);
+                }
+            }
+        },
+        getGeometry : getGeometry
+    };
+    var museumsLayer = newMuseumsLayer(options);
 
     // Bind an event listener for this layer
     museumsLayer.on('click', function(ev) {
         var counter = 0;
         function renderMuseum(open, data) {
-            var props = data.properties;
+            var props = getProperties(data);
             var script = '';
             var content = '' + //
             '<div>' + //
@@ -51,8 +69,9 @@ function main(id) {
         }
 
         var latlng;
-        if (ev.data.geometry.type === 'Point') {
-            var coords = ev.data.geometry.coordinates;
+        var geom = getGeometry(ev.data);
+        if (geom.type === 'Point') {
+            var coords = geom.coordinates;
             latlng = L.latLng(coords[1], coords[0]);
         } else {
             latlng = ev.latlng;
@@ -87,7 +106,7 @@ function main(id) {
     map.setView(latlng, mapZoom);
 }
 
-function newMuseumsLayer(data) {
+function newMuseumsLayer(options) {
 
     var image = document.querySelector('img.icon');
     image.parentNode.removeChild(image);
@@ -111,15 +130,13 @@ function newMuseumsLayer(data) {
             };
         }
     });
-    var provider = new L.DataLayer.DataProvider({
-        data : data
-    });
+    var provider = new L.DataLayer.DataProvider(options);
     var dataLayer = new L.DataLayer({
         style : style,
         provider : provider
     });
     dataLayer.on('mousemove', function(ev) {
-//        console.log('mousemove', ev.data);
+        // console.log('mousemove', ev.data);
     })
     return dataLayer;
 }

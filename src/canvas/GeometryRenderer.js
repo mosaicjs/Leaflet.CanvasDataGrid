@@ -25,34 +25,35 @@ extend(GeometryRenderer.prototype, {
      * 
      * @param resource
      *            the resource to render
-     * @param context
-     *            a canvas context
+     * @param styles
+     *            style provider defining how features should be visualized
      */
-    drawFeature : function(resource, style) {
+    drawFeature : function(resource, styles, options) {
         var that = this;
-        var geometry = resource.geometry;
+        var geometry = this._getGeometry(resource, options);
         if (!geometry)
             return;
         drawGeometry(geometry);
         return;
 
         function drawMarker(point, index) {
-            var marker = style.getMarkerStyle(resource, {
-                index : index,
-                point : point,
-                resource : resource
-            });
-            if (!marker || !marker.image)
+            var markerStyle = styles.getMarkerStyle(resource, extend({},
+                    options, {
+                        index : index,
+                        point : point,
+                        data : resource
+                    }));
+            if (!markerStyle || !markerStyle.image)
                 return;
 
             var pos = [ point[0], point[1] ]; // Copy
-            if (marker.anchor) {
-                pos[0] -= marker.anchor[0];
-                pos[1] -= marker.anchor[1];
+            if (markerStyle.anchor) {
+                pos[0] -= markerStyle.anchor[0];
+                pos[1] -= markerStyle.anchor[1];
             }
-            that.context.drawImage(marker.image, pos, {
+            that.context.drawImage(markerStyle.image, pos, extend({
                 data : resource
-            });
+            }, markerStyle));
         }
         function drawMarkers(points) {
             points = that._getProjectedPoints(points);
@@ -63,17 +64,20 @@ extend(GeometryRenderer.prototype, {
         }
 
         function drawLine(points, index) {
-            var options = style.getLineStyle(resource, {
-                index : index
-            });
-            if (options) {
+            var lineStyle = styles.getLineStyle(resource, extend({}, options, {
+                points : points,
+                index : index,
+                data : resource
+            }));
+            if (lineStyle) {
                 points = that._getProjectedPoints(points);
-                options.data = resource;
-                that.context.drawLine(points, options);
+                that.context.drawLine(points, extend({
+                    data : resource
+                }, lineStyle));
             }
             // drawMarker([ 0, 0 ]);
         }
-
+        //
         function drawPolygon(coords, index) {
             var polygons = that._getProjectedPoints(coords[0]);
             var holes = [];
@@ -83,68 +87,65 @@ extend(GeometryRenderer.prototype, {
                     holes.push(hole);
                 }
             }
-            var options = style.getPolygonStyle(resource, {
-                index : index
-            });
-            if (options) {
-                options.data = resource;
-                that.context.drawPolygon([ polygons ], holes, options);
+            var polygonStyle = styles.getPolygonStyle(resource, extend({},
+                    options, {
+                        coords : coords,
+                        index : index,
+                        data : resource
+                    }));
+            if (polygonStyle) {
+                that.context.drawPolygon([ polygons ], holes, extend({
+                    data : resource
+                }, polygonStyle));
             }
             // drawMarker([ 0, 0 ]);
         }
 
         function drawGeometry(geometry) {
+            var i, geom;
             var coords = geometry.coordinates;
             switch (geometry.type) {
             case 'Point':
-                (function() {
-                    drawMarkers([ coords ]);
-                })();
+                drawMarkers([ coords ]);
                 break;
             case 'MultiPoint':
-                (function() {
-                    drawMarkers(coords);
-                })();
+                drawMarkers(coords);
                 break;
             case 'LineString':
-                (function() {
-                    drawLine(coords);
-                })();
+                drawLine(coords);
                 break;
             case 'MultiLineString':
-                (function() {
-                    for (var i = 0; i < coords.length; i++) {
-                        var points = that._getProjectedPoints(context,
-                                coords[i]);
-                        drawLine(points, i);
-                    }
-                })();
+                for (i = 0; i < coords.length; i++) {
+                    var points = that._getProjectedPoints(context, coords[i]);
+                    drawLine(points, i);
+                }
                 break;
             case 'Polygon':
-                (function() {
-                    drawPolygon(coords);
-                })();
+                drawPolygon(coords);
                 break;
             case 'MultiPolygon':
-                (function() {
-                    for (var i = 0; i < coords.length; i++) {
-                        drawPolygon(coords[i], i);
-                    }
-                })();
+                for (i = 0; i < coords.length; i++) {
+                    drawPolygon(coords[i], i);
+                }
                 break;
             case 'GeometryCollection':
-                (function() {
-                    var geoms = geometry.geometries;
-                    for (var i = 0, len = geoms.length; i < len; i++) {
-                        drawGeometry(geoms[i]);
-                    }
-                })();
+                geoms = geometry.geometries;
+                for (i = 0, len = geoms.length; i < len; i++) {
+                    drawGeometry(geoms[i]);
+                }
                 break;
             }
         }
     },
 
     // ------------------------------------------------------------------
+
+    _getGeometry : function(resource) {
+        if (typeof this.options.getGeometry === 'function') {
+            return this.options.getGeometry(resource);
+        }
+        return resource.geometry;
+    },
 
     /**
      * Returns an array of projected points.
@@ -156,7 +157,7 @@ extend(GeometryRenderer.prototype, {
             }
             return this._getProjectedPoints(coordinates);
         }
-
+        // FIXME: projected points calculation does not work as expected
         var t = this.getTransformation();
         var s = this.getScale();
         var origin = this.getOrigin();

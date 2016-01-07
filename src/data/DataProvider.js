@@ -1,5 +1,5 @@
 var rbush = require('rbush');
-var TurfExtent = require('turf-extent');
+var forEachCoordinate = require('./forEachCoordinate');
 
 /**
  * A simple data provider synchronously indexing the given data using an RTree
@@ -13,6 +13,9 @@ DataProvider.prototype = {
     /** Initializes this object and indexes the initial data set. */
     initialize : function(options) {
         this.options = options || {};
+        if (typeof this.options.getGeometry === 'function') {
+            this.getGeometry = this.options.getGeometry;
+        }
         this.setData(this.options.data);
     },
 
@@ -37,13 +40,19 @@ DataProvider.prototype = {
         data = data || [];
         var array = [];
         var that = this;
-        for (var i = 0; i < data.length; i++) {
-            var d = data[i];
+        function index(d) {
             var bbox = that._getBoundingBox(d);
             if (bbox) {
                 var coords = that._toIndexKey(bbox);
                 coords.data = d;
                 array.push(coords);
+            }
+        }
+        if (typeof data.forEach === 'function') {
+            data.forEach(index);
+        } else if (data.length) {
+            for (var i = 0; i < data.length; i++) {
+                index(data[i]);
             }
         }
         this._rtree.load(array);
@@ -89,9 +98,24 @@ DataProvider.prototype = {
      * Returns an object defining a bounding box ([south, west, north, east])
      * for the specified resource.
      */
-    _getBoundingBox : function(d) {
-        var bbox = d ? TurfExtent(d) : null;
-        return bbox;
+    _getBoundingBox : function(r) {
+        var geometry = this.getGeometry(r);
+        var extent = [ Infinity, Infinity, -Infinity, -Infinity ];
+        forEachCoordinate(geometry, function(coord) {
+            if (extent[0] > coord[0])
+                extent[0] = coord[0];
+            if (extent[1] > coord[1])
+                extent[1] = coord[1];
+            if (extent[2] < coord[0])
+                extent[2] = coord[0];
+            if (extent[3] < coord[1])
+                extent[3] = coord[1];
+        });
+        return extent;
+    },
+
+    getGeometry : function(r) {
+        return r.geometry;
     }
 
 };

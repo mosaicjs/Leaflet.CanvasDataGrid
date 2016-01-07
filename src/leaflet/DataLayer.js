@@ -9,6 +9,12 @@ var GeometryRenderer = require('../canvas/GeometryRenderer');
 var ParentLayer = L.GridLayer;
 var DataLayer = ParentLayer.extend({
 
+    initialize : function(options) {
+        ParentLayer.prototype.initialize.apply(this, arguments);
+        this._newCanvas = this._newCanvas.bind(this);
+        this._getImageMaskIndex = this._getImageMaskIndex.bind(this);
+    },
+
     onAdd : function(map) {
         ParentLayer.prototype.onAdd.apply(this, arguments);
         this._map.on('mousemove', this._onMouseMove, this);
@@ -26,14 +32,8 @@ var DataLayer = ParentLayer.extend({
     },
 
     createTile : function(tilePoint, done) {
-        function newCanvas(w, h) {
-            var canvas = document.createElement('canvas');
-            canvas.width = w;
-            canvas.height = h;
-            return canvas;
-        }
         var tileSize = this.getTileSize();
-        var canvas = newCanvas(tileSize.x, tileSize.y);
+        var canvas = this._newCanvas(tileSize.x, tileSize.y);
 
         var bounds = this._tileCoordsToBounds(tilePoint);
         var bbox = [ bounds.getWest(), bounds.getSouth(), bounds.getEast(),
@@ -51,25 +51,24 @@ var DataLayer = ParentLayer.extend({
         var size = Math.min(tileSize.x, tileSize.y);
         var scale = GeometryRenderer.calculateScale(tilePoint.z, size);
 
-        var maskIndex = this.maskIndex = this.maskIndex || {};
-        var resolution = 4;
+        var resolution = this.options.resolution || 4;
         var ContextType = CanvasIndexingContext;
         // var ContextType = CanvasContext;
         var context = new ContextType({
             canvas : canvas,
-            newCanvas : newCanvas,
+            newCanvas : this._newCanvas,
             resolution : resolution,
-            imageMaskIndex : function(image, options) {
-                return maskIndex;
-            }
+            imageMaskIndex : this._getImageMaskIndex
         });
         var map = this._map;
+        var provider = this.options.provider;
         var renderer = new GeometryRenderer({
             context : context,
             tileSize : tileSize,
             scale : scale,
             origin : origin,
             bbox : bbox,
+            getGeometry : provider.getGeometry.bind(provider),
             project : function(coordinates) {
                 function project(point) {
                     var p = map.project(L.latLng(point[1], point[0]),
@@ -91,11 +90,23 @@ var DataLayer = ParentLayer.extend({
         canvas.renderer = renderer;
 
         var style = this.options.style;
-        this.options.provider.loadData({
-            bbox : bbox
+        provider.loadData({
+            bbox : bbox,
+            tilePoint : tilePoint
         }, function(err, data) {
-            for (var i = 0; i < data.length; i++) {
-                renderer.drawFeature(data[i], style);
+            if (err) {
+                return done(err);
+            }
+            if (data) {
+                if (typeof data.forEach === 'function') {
+                    data.forEach(function(d, i) {
+                        renderer.drawFeature(d, style);
+                    })
+                } else if (data.length) {
+                    for (var i = 0; i < data.length; i++) {
+                        renderer.drawFeature(data[i], style);
+                    }
+                }
             }
             setTimeout(function() {
                 done(null, canvas);
@@ -105,9 +116,22 @@ var DataLayer = ParentLayer.extend({
         return canvas;
     },
 
-    _update : function() {
-        ParentLayer.prototype._update.apply(this, arguments);
+    // -----------------------------------------------------------------------
+    _newCanvas : function(w, h) {
+        var canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        return canvas;
     },
+
+    _getImageMaskIndex : function(image, options) {
+        if (!this.maskIndex) {
+            this.maskIndex = {};
+        }
+        return this.maskIndex;
+    },
+
+    // -----------------------------------------------------------------------
 
     _onZoomStart : function(ev) {
         this._prevLevel = this._level;

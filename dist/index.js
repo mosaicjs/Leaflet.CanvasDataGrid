@@ -87,6 +87,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	var ParentLayer = L.GridLayer;
 	var DataLayer = ParentLayer.extend({
 
+	    initialize : function(options) {
+	        ParentLayer.prototype.initialize.apply(this, arguments);
+	        this._newCanvas = this._newCanvas.bind(this);
+	        this._getImageMaskIndex = this._getImageMaskIndex.bind(this);
+	    },
+
 	    onAdd : function(map) {
 	        ParentLayer.prototype.onAdd.apply(this, arguments);
 	        this._map.on('mousemove', this._onMouseMove, this);
@@ -104,14 +110,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    createTile : function(tilePoint, done) {
-	        function newCanvas(w, h) {
-	            var canvas = document.createElement('canvas');
-	            canvas.width = w;
-	            canvas.height = h;
-	            return canvas;
-	        }
 	        var tileSize = this.getTileSize();
-	        var canvas = newCanvas(tileSize.x, tileSize.y);
+	        var canvas = this._newCanvas(tileSize.x, tileSize.y);
 
 	        var bounds = this._tileCoordsToBounds(tilePoint);
 	        var bbox = [ bounds.getWest(), bounds.getSouth(), bounds.getEast(),
@@ -129,25 +129,24 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var size = Math.min(tileSize.x, tileSize.y);
 	        var scale = GeometryRenderer.calculateScale(tilePoint.z, size);
 
-	        var maskIndex = this.maskIndex = this.maskIndex || {};
-	        var resolution = 4;
+	        var resolution = this.options.resolution || 4;
 	        var ContextType = CanvasIndexingContext;
 	        // var ContextType = CanvasContext;
 	        var context = new ContextType({
 	            canvas : canvas,
-	            newCanvas : newCanvas,
+	            newCanvas : this._newCanvas,
 	            resolution : resolution,
-	            imageMaskIndex : function(image, options) {
-	                return maskIndex;
-	            }
+	            imageMaskIndex : this._getImageMaskIndex
 	        });
 	        var map = this._map;
+	        var provider = this.options.provider;
 	        var renderer = new GeometryRenderer({
 	            context : context,
 	            tileSize : tileSize,
 	            scale : scale,
 	            origin : origin,
 	            bbox : bbox,
+	            getGeometry : provider.getGeometry.bind(provider),
 	            project : function(coordinates) {
 	                function project(point) {
 	                    var p = map.project(L.latLng(point[1], point[0]),
@@ -169,11 +168,23 @@ return /******/ (function(modules) { // webpackBootstrap
 	        canvas.renderer = renderer;
 
 	        var style = this.options.style;
-	        this.options.provider.loadData({
-	            bbox : bbox
+	        provider.loadData({
+	            bbox : bbox,
+	            tilePoint : tilePoint
 	        }, function(err, data) {
-	            for (var i = 0; i < data.length; i++) {
-	                renderer.drawFeature(data[i], style);
+	            if (err) {
+	                return done(err);
+	            }
+	            if (data) {
+	                if (typeof data.forEach === 'function') {
+	                    data.forEach(function(d, i) {
+	                        renderer.drawFeature(d, style);
+	                    })
+	                } else if (data.length) {
+	                    for (var i = 0; i < data.length; i++) {
+	                        renderer.drawFeature(data[i], style);
+	                    }
+	                }
 	            }
 	            setTimeout(function() {
 	                done(null, canvas);
@@ -183,9 +194,22 @@ return /******/ (function(modules) { // webpackBootstrap
 	        return canvas;
 	    },
 
-	    _update : function() {
-	        ParentLayer.prototype._update.apply(this, arguments);
+	    // -----------------------------------------------------------------------
+	    _newCanvas : function(w, h) {
+	        var canvas = document.createElement('canvas');
+	        canvas.width = w;
+	        canvas.height = h;
+	        return canvas;
 	    },
+
+	    _getImageMaskIndex : function(image, options) {
+	        if (!this.maskIndex) {
+	            this.maskIndex = {};
+	        }
+	        return this.maskIndex;
+	    },
+
+	    // -----------------------------------------------------------------------
 
 	    _onZoomStart : function(ev) {
 	        this._prevLevel = this._level;
@@ -395,6 +419,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	        }
 	    }
+	    return to;
 	}
 
 
@@ -1056,34 +1081,35 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * 
 	     * @param resource
 	     *            the resource to render
-	     * @param context
-	     *            a canvas context
+	     * @param styles
+	     *            style provider defining how features should be visualized
 	     */
-	    drawFeature : function(resource, style) {
+	    drawFeature : function(resource, styles, options) {
 	        var that = this;
-	        var geometry = resource.geometry;
+	        var geometry = this._getGeometry(resource, options);
 	        if (!geometry)
 	            return;
 	        drawGeometry(geometry);
 	        return;
 
 	        function drawMarker(point, index) {
-	            var marker = style.getMarkerStyle(resource, {
-	                index : index,
-	                point : point,
-	                resource : resource
-	            });
-	            if (!marker || !marker.image)
+	            var markerStyle = styles.getMarkerStyle(resource, extend({},
+	                    options, {
+	                        index : index,
+	                        point : point,
+	                        data : resource
+	                    }));
+	            if (!markerStyle || !markerStyle.image)
 	                return;
 
 	            var pos = [ point[0], point[1] ]; // Copy
-	            if (marker.anchor) {
-	                pos[0] -= marker.anchor[0];
-	                pos[1] -= marker.anchor[1];
+	            if (markerStyle.anchor) {
+	                pos[0] -= markerStyle.anchor[0];
+	                pos[1] -= markerStyle.anchor[1];
 	            }
-	            that.context.drawImage(marker.image, pos, {
+	            that.context.drawImage(markerStyle.image, pos, extend({
 	                data : resource
-	            });
+	            }, markerStyle));
 	        }
 	        function drawMarkers(points) {
 	            points = that._getProjectedPoints(points);
@@ -1094,17 +1120,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 
 	        function drawLine(points, index) {
-	            var options = style.getLineStyle(resource, {
-	                index : index
-	            });
-	            if (options) {
+	            var lineStyle = styles.getLineStyle(resource, extend({}, options, {
+	                points : points,
+	                index : index,
+	                data : resource
+	            }));
+	            if (lineStyle) {
 	                points = that._getProjectedPoints(points);
-	                options.data = resource;
-	                that.context.drawLine(points, options);
+	                that.context.drawLine(points, extend({
+	                    data : resource
+	                }, lineStyle));
 	            }
 	            // drawMarker([ 0, 0 ]);
 	        }
-
+	        //
 	        function drawPolygon(coords, index) {
 	            var polygons = that._getProjectedPoints(coords[0]);
 	            var holes = [];
@@ -1114,68 +1143,65 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    holes.push(hole);
 	                }
 	            }
-	            var options = style.getPolygonStyle(resource, {
-	                index : index
-	            });
-	            if (options) {
-	                options.data = resource;
-	                that.context.drawPolygon([ polygons ], holes, options);
+	            var polygonStyle = styles.getPolygonStyle(resource, extend({},
+	                    options, {
+	                        coords : coords,
+	                        index : index,
+	                        data : resource
+	                    }));
+	            if (polygonStyle) {
+	                that.context.drawPolygon([ polygons ], holes, extend({
+	                    data : resource
+	                }, polygonStyle));
 	            }
 	            // drawMarker([ 0, 0 ]);
 	        }
 
 	        function drawGeometry(geometry) {
+	            var i, geom;
 	            var coords = geometry.coordinates;
 	            switch (geometry.type) {
 	            case 'Point':
-	                (function() {
-	                    drawMarkers([ coords ]);
-	                })();
+	                drawMarkers([ coords ]);
 	                break;
 	            case 'MultiPoint':
-	                (function() {
-	                    drawMarkers(coords);
-	                })();
+	                drawMarkers(coords);
 	                break;
 	            case 'LineString':
-	                (function() {
-	                    drawLine(coords);
-	                })();
+	                drawLine(coords);
 	                break;
 	            case 'MultiLineString':
-	                (function() {
-	                    for (var i = 0; i < coords.length; i++) {
-	                        var points = that._getProjectedPoints(context,
-	                                coords[i]);
-	                        drawLine(points, i);
-	                    }
-	                })();
+	                for (i = 0; i < coords.length; i++) {
+	                    var points = that._getProjectedPoints(context, coords[i]);
+	                    drawLine(points, i);
+	                }
 	                break;
 	            case 'Polygon':
-	                (function() {
-	                    drawPolygon(coords);
-	                })();
+	                drawPolygon(coords);
 	                break;
 	            case 'MultiPolygon':
-	                (function() {
-	                    for (var i = 0; i < coords.length; i++) {
-	                        drawPolygon(coords[i], i);
-	                    }
-	                })();
+	                for (i = 0; i < coords.length; i++) {
+	                    drawPolygon(coords[i], i);
+	                }
 	                break;
 	            case 'GeometryCollection':
-	                (function() {
-	                    var geoms = geometry.geometries;
-	                    for (var i = 0, len = geoms.length; i < len; i++) {
-	                        drawGeometry(geoms[i]);
-	                    }
-	                })();
+	                geoms = geometry.geometries;
+	                for (i = 0, len = geoms.length; i < len; i++) {
+	                    drawGeometry(geoms[i]);
+	                }
 	                break;
 	            }
 	        }
 	    },
 
 	    // ------------------------------------------------------------------
+
+	    _getGeometry : function(resource) {
+	        if (typeof this.options.getGeometry === 'function') {
+	            return this.options.getGeometry(resource);
+	        }
+	        return resource.geometry;
+	    },
 
 	    /**
 	     * Returns an array of projected points.
@@ -1187,7 +1213,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	            return this._getProjectedPoints(coordinates);
 	        }
-
+	        // FIXME: projected points calculation does not work as expected
 	        var t = this.getTransformation();
 	        var s = this.getScale();
 	        var origin = this.getOrigin();
@@ -1336,23 +1362,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * index.
 	 */
 	function IDataProvider() {
-	    this.initialize.apply(this, arguments);
-	}
-	IDataProvider.prototype = {
-
-	    /** Initializes this object and indexes the initial data set. */
-	    initialize : function(options) {
-	        this.options = options || {};
-	    },
-
-	    /**
-	     * Loads and returns indexed data contained in the specified bounding box.
-	     */
-	    loadData : function(options, callback) {
-	        callback(null, this.options.data || []);
+	    if (typeof this.options.getGeometry === 'function') {
+	        this.getGeometry = this.options.getGeometry;
 	    }
-
-	};
+	    this.options = options || {};
+	}
+	/**
+	 * Loads and returns indexed data contained in the specified bounding box.
+	 */
+	IDataProvider.prototype.loadData = function(options, callback) {
+	    callback(null, this.options.data || []);
+	}
+	IDataProvider.prototype.getGeometry = function(r) {
+	    return r.geometry;
+	}
 
 	module.exports = IDataProvider;
 
@@ -1362,7 +1385,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /***/ function(module, exports, __webpack_require__) {
 
 	var rbush = __webpack_require__(13);
-	var TurfExtent = __webpack_require__(14);
+	var forEachCoordinate = __webpack_require__(14);
 
 	/**
 	 * A simple data provider synchronously indexing the given data using an RTree
@@ -1376,6 +1399,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /** Initializes this object and indexes the initial data set. */
 	    initialize : function(options) {
 	        this.options = options || {};
+	        if (typeof this.options.getGeometry === 'function') {
+	            this.getGeometry = this.options.getGeometry;
+	        }
 	        this.setData(this.options.data);
 	    },
 
@@ -1400,13 +1426,19 @@ return /******/ (function(modules) { // webpackBootstrap
 	        data = data || [];
 	        var array = [];
 	        var that = this;
-	        for (var i = 0; i < data.length; i++) {
-	            var d = data[i];
+	        function index(d) {
 	            var bbox = that._getBoundingBox(d);
 	            if (bbox) {
 	                var coords = that._toIndexKey(bbox);
 	                coords.data = d;
 	                array.push(coords);
+	            }
+	        }
+	        if (typeof data.forEach === 'function') {
+	            data.forEach(index);
+	        } else if (data.length) {
+	            for (var i = 0; i < data.length; i++) {
+	                index(data[i]);
 	            }
 	        }
 	        this._rtree.load(array);
@@ -1452,9 +1484,24 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * Returns an object defining a bounding box ([south, west, north, east])
 	     * for the specified resource.
 	     */
-	    _getBoundingBox : function(d) {
-	        var bbox = d ? TurfExtent(d) : null;
-	        return bbox;
+	    _getBoundingBox : function(r) {
+	        var geometry = this.getGeometry(r);
+	        var extent = [ Infinity, Infinity, -Infinity, -Infinity ];
+	        forEachCoordinate(geometry, function(coord) {
+	            if (extent[0] > coord[0])
+	                extent[0] = coord[0];
+	            if (extent[1] > coord[1])
+	                extent[1] = coord[1];
+	            if (extent[2] < coord[0])
+	                extent[2] = coord[0];
+	            if (extent[3] < coord[1])
+	                extent[3] = coord[1];
+	        });
+	        return extent;
+	    },
+
+	    getGeometry : function(r) {
+	        return r.geometry;
 	    }
 
 	};
@@ -2091,220 +2138,31 @@ return /******/ (function(modules) { // webpackBootstrap
 
 /***/ },
 /* 14 */
-/***/ function(module, exports, __webpack_require__) {
-
-	var each = __webpack_require__(15).coordEach;
-
-	/**
-	 * Takes any {@link GeoJSON} object, calculates the extent of all input features, and returns a bounding box.
-	 *
-	 * @module turf/extent
-	 * @category measurement
-	 * @param {GeoJSON} input any valid GeoJSON Object
-	 * @return {Array<number>} the bounding box of `input` given
-	 * as an array in WSEN order (west, south, east, north)
-	 * @example
-	 * var input = {
-	 *   "type": "FeatureCollection",
-	 *   "features": [
-	 *     {
-	 *       "type": "Feature",
-	 *       "properties": {},
-	 *       "geometry": {
-	 *         "type": "Point",
-	 *         "coordinates": [114.175329, 22.2524]
-	 *       }
-	 *     }, {
-	 *       "type": "Feature",
-	 *       "properties": {},
-	 *       "geometry": {
-	 *         "type": "Point",
-	 *         "coordinates": [114.170007, 22.267969]
-	 *       }
-	 *     }, {
-	 *       "type": "Feature",
-	 *       "properties": {},
-	 *       "geometry": {
-	 *         "type": "Point",
-	 *         "coordinates": [114.200649, 22.274641]
-	 *       }
-	 *     }, {
-	 *       "type": "Feature",
-	 *       "properties": {},
-	 *       "geometry": {
-	 *         "type": "Point",
-	 *         "coordinates": [114.186744, 22.265745]
-	 *       }
-	 *     }
-	 *   ]
-	 * };
-	 *
-	 * var bbox = turf.extent(input);
-	 *
-	 * var bboxPolygon = turf.bboxPolygon(bbox);
-	 *
-	 * var resultFeatures = input.features.concat(bboxPolygon);
-	 * var result = {
-	 *   "type": "FeatureCollection",
-	 *   "features": resultFeatures
-	 * };
-	 *
-	 * //=result
-	 */
-	module.exports = function(layer) {
-	    var extent = [Infinity, Infinity, -Infinity, -Infinity];
-	    each(layer, function(coord) {
-	      if (extent[0] > coord[0]) extent[0] = coord[0];
-	      if (extent[1] > coord[1]) extent[1] = coord[1];
-	      if (extent[2] < coord[0]) extent[2] = coord[0];
-	      if (extent[3] < coord[1]) extent[3] = coord[1];
-	    });
-	    return extent;
-	};
-
-
-/***/ },
-/* 15 */
 /***/ function(module, exports) {
 
-	/**
-	 * Lazily iterate over coordinates in any GeoJSON object, similar to
-	 * Array.forEach.
-	 *
-	 * @param {Object} layer any GeoJSON object
-	 * @param {Function} callback a method that takes (value)
-	 * @param {boolean=} excludeWrapCoord whether or not to include
-	 * the final coordinate of LinearRings that wraps the ring in its iteration.
-	 * @example
-	 * var point = { type: 'Point', coordinates: [0, 0] };
-	 * coordEach(point, function(coords) {
-	 *   // coords is equal to [0, 0]
-	 * });
-	 */
-	function coordEach(layer, callback, excludeWrapCoord) {
-	  var i, j, k, g, geometry, stopG, coords,
-	    geometryMaybeCollection,
-	    wrapShrink = 0,
-	    isGeometryCollection,
-	    isFeatureCollection = layer.type === 'FeatureCollection',
-	    isFeature = layer.type === 'Feature',
-	    stop = isFeatureCollection ? layer.features.length : 1;
-
-	  // This logic may look a little weird. The reason why it is that way
-	  // is because it's trying to be fast. GeoJSON supports multiple kinds
-	  // of objects at its root: FeatureCollection, Features, Geometries.
-	  // This function has the responsibility of handling all of them, and that
-	  // means that some of the `for` loops you see below actually just don't apply
-	  // to certain inputs. For instance, if you give this just a
-	  // Point geometry, then both loops are short-circuited and all we do
-	  // is gradually rename the input until it's called 'geometry'.
-	  //
-	  // This also aims to allocate as few resources as possible: just a
-	  // few numbers and booleans, rather than any temporary arrays as would
-	  // be required with the normalization approach.
-	  for (i = 0; i < stop; i++) {
-
-	    geometryMaybeCollection = (isFeatureCollection ? layer.features[i].geometry :
-	        (isFeature ? layer.geometry : layer));
-	    isGeometryCollection = geometryMaybeCollection.type === 'GeometryCollection';
-	    stopG = isGeometryCollection ? geometryMaybeCollection.geometries.length : 1;
-
-	    for (g = 0; g < stopG; g++) {
-
-	      geometry = isGeometryCollection ?
-	          geometryMaybeCollection.geometries[g] : geometryMaybeCollection;
-	      coords = geometry.coordinates;
-
-	      wrapShrink = (excludeWrapCoord &&
-	        (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon')) ?
-	        1 : 0;
-
-	      if (geometry.type === 'Point') {
+	module.exports = function forEach(geometry, callback) {
+	    var j, k, l;
+	    var coords = geometry.coordinates;
+	    if (geometry.type === 'Point') {
 	        callback(coords);
-	      } else if (geometry.type === 'LineString' || geometry.type === 'MultiPoint') {
-	        for (j = 0; j < coords.length; j++) callback(coords[j]);
-	      } else if (geometry.type === 'Polygon' || geometry.type === 'MultiLineString') {
+	    } else if (geometry.type === 'LineString' || geometry.type === 'MultiPoint') {
 	        for (j = 0; j < coords.length; j++)
-	          for (k = 0; k < coords[j].length - wrapShrink; k++)
-	            callback(coords[j][k]);
-	      } else if (geometry.type === 'MultiPolygon') {
+	            callback(coords[j]);
+	    } else if (geometry.type === 'Polygon'
+	            || geometry.type === 'MultiLineString') {
+	        var wrapShrink = (geometry.type === 'Polygon') ? 1 : 0;
 	        for (j = 0; j < coords.length; j++)
-	          for (k = 0; k < coords[j].length; k++)
-	            for (l = 0; l < coords[j][k].length - wrapShrink; l++)
-	              callback(coords[j][k][l]);
-	      } else {
+	            for (k = 0; k < coords[j].length - wrapShrink; k++)
+	                callback(coords[j][k]);
+	    } else if (geometry.type === 'MultiPolygon') {
+	        for (j = 0; j < coords.length; j++)
+	            for (k = 0; k < coords[j].length; k++)
+	                for (l = 0; l < coords[j][k].length - 1; l++)
+	                    callback(coords[j][k][l]);
+	    } else {
 	        throw new Error('Unknown Geometry Type');
-	      }
 	    }
-	  }
 	}
-	module.exports.coordEach = coordEach;
-
-	/**
-	 * Lazily reduce coordinates in any GeoJSON object into a single value,
-	 * similar to how Array.reduce works. However, in this case we lazily run
-	 * the reduction, so an array of all coordinates is unnecessary.
-	 *
-	 * @param {Object} layer any GeoJSON object
-	 * @param {Function} callback a method that takes (memo, value) and returns
-	 * a new memo
-	 * @param {boolean=} excludeWrapCoord whether or not to include
-	 * the final coordinate of LinearRings that wraps the ring in its iteration.
-	 * @param {*} memo the starting value of memo: can be any type.
-	 */
-	function coordReduce(layer, callback, memo, excludeWrapCoord) {
-	  coordEach(layer, function(coord) {
-	    memo = callback(memo, coord);
-	  }, excludeWrapCoord);
-	  return memo;
-	}
-	module.exports.coordReduce = coordReduce;
-
-	/**
-	 * Lazily iterate over property objects in any GeoJSON object, similar to
-	 * Array.forEach.
-	 *
-	 * @param {Object} layer any GeoJSON object
-	 * @param {Function} callback a method that takes (value)
-	 * @example
-	 * var point = { type: 'Feature', geometry: null, properties: { foo: 1 } };
-	 * propEach(point, function(props) {
-	 *   // props is equal to { foo: 1}
-	 * });
-	 */
-	function propEach(layer, callback) {
-	  var i;
-	  switch (layer.type) {
-	      case 'FeatureCollection':
-	        features = layer.features;
-	        for (i = 0; i < layer.features.length; i++) {
-	            callback(layer.features[i].properties);
-	        }
-	        break;
-	      case 'Feature':
-	        callback(layer.properties);
-	        break;
-	  }
-	}
-	module.exports.propEach = propEach;
-
-	/**
-	 * Lazily reduce properties in any GeoJSON object into a single value,
-	 * similar to how Array.reduce works. However, in this case we lazily run
-	 * the reduction, so an array of all properties is unnecessary.
-	 *
-	 * @param {Object} layer any GeoJSON object
-	 * @param {Function} callback a method that takes (memo, coord) and returns
-	 * a new memo
-	 * @param {*} memo the starting value of memo: can be any type.
-	 */
-	function propReduce(layer, callback, memo) {
-	  propEach(layer, function(prop) {
-	    memo = callback(memo, prop);
-	  });
-	  return memo;
-	}
-	module.exports.propReduce = propReduce;
 
 
 /***/ }

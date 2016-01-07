@@ -8,4 +8,5 @@ module.exports = function extend(to) {
             }
         }
     }
+    return to;
 }
