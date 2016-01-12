@@ -5,7 +5,7 @@ var http = require('http');
 var send = require('send');
 var url = require('url');
 var app = http.createServer(function(req, res) {
-    send(req, url.parse(req.url).pathname).root(__dirname + '/../../').pipe(res);
+    send(req, url.parse(req.url).pathname).root(__dirname + '/../').pipe(res);
 });
 app.listen(port, host);
 var base = 'http://' + host + ':' + port;

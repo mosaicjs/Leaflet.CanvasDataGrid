@@ -7,7 +7,7 @@
 	content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"></meta>
 
 <!-- CSS styles -->
-<link href="../../node_modules/leaflet/dist/leaflet.css" rel="stylesheet"></link>
+<link href="../node_modules/leaflet/dist/leaflet.css" rel="stylesheet"></link>
 <link href="./main.css" rel="stylesheet"></link>
 
 </head>
@@ -21,20 +21,27 @@
     * "data-tiles-url" - URL mask for tiles
     * "data-attribution" - attribution information
     -->
-    <img src="./marker-icon.png" class="icon" />
+	<img src="./marker-icon.png" class="icon" />
 	<div id="map" data-center="[2.33314, 48.86167]" data-zoom="12"
 		data-max-zoom="18"
 		data-tiles-url="http://{s}.tile.stamen.com/toner/{z}/{x}/{y}.png"
 		data-attribution="Map tiles by Stamen Design, under CC BY 3.0 | Map data &copy; OpenStreetMap contributors, CC-BY-SA"></div>
 
 	<!-- Scripts -->
-	<script src="../../node_modules/leaflet/dist/leaflet-src.js"
+	<script src="../node_modules/leaflet/dist/leaflet-src.js"
 		type="text/javascript"></script>
+
 	<script type="text/javascript">
         window.leaflet = L;
     </script>
-	<script src="../../dist/index.js" type="text/javascript"></script>
-    <script src="./data.js"></script>
+    
+    <!--  Draw SVG on Canvas -->
+    <script src="./node_modules/canvg/StackBlur.js" type="text/javascript"></script>
+    <script src="./node_modules/canvg/rgbcolor.js" type="text/javascript"></script>
+	<script src="./node_modules/canvg/canvg.js" type="text/javascript"></script>
+	
+	<script src="../dist/index.js" type="text/javascript"></script>
+	<script src="./data.json"></script>
 	<script src="./main.js"></script>
 
 </body>

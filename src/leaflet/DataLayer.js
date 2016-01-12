@@ -42,9 +42,9 @@ var DataLayer = ParentLayer.extend({
 
         var pad = this._getTilePad();
         var deltaLeft = Math.abs(bbox[0] - bbox[2]) * pad[0];
+        var deltaBottom = Math.abs(bbox[1] - bbox[3]) * pad[1];
         var deltaRight = Math.abs(bbox[0] - bbox[2]) * pad[2];
         var deltaTop = Math.abs(bbox[1] - bbox[3]) * pad[3];
-        var deltaBottom = Math.abs(bbox[1] - bbox[3]) * pad[1];
         bbox = [ bbox[0] - deltaLeft, bbox[1] - deltaBottom,
                 bbox[2] + deltaRight, bbox[3] + deltaTop ];
 
@@ -152,7 +152,9 @@ var DataLayer = ParentLayer.extend({
     _getTilePad : function() {
         // left, bottom, right, top
         // west, south, east, north
-        return [ 0.2, 0.2, 0.2, 0.2 ];
+        var pad = this.options.tilePad || [ 0.2, 0.2, 0.2, 0.2 ];
+        return pad;
+        
     },
 
     _getDataByCoordinates : function(latlng) {

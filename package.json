@@ -1,9 +1,9 @@
 {
-  "name": "leaflet.tilelayer.canvasdatagrid",
+  "name": "leaflet-canvasdatagrid",
   "version": "0.0.4",
   "description": "Leaflet data layer rendering information on canvas tiles",
-  "homepage": "https://github.com/mosaicjs/Leaflet.TileLayer.CanvasDataGrid",
-  "appname": "Leaflet.TileLayer.CanvasDataGrid",
+  "homepage": "https://github.com/mosaicjs/Leaflet.CanvasDataGrid",
+  "appname": "Leaflet.CanvasDataGrid",
   "licenses": [
     {
       "type": "MIT"
@@ -12,7 +12,7 @@
   "author": "Mikhail Kotelnikov <mikhail.kotelnikov@ubimix.com>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mosaicjs/Leaflet.TileLayer.CanvasDataGrid"
+    "url": "https://github.com/mosaicjs/Leaflet.CanvasDataGrid"
   },
   "main": "index.js",
   "scripts": {
@@ -24,7 +24,7 @@
   "keywords": [],
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/mosaicjs/Leaflet.TileLayer.CanvasDataGrid/issues"
+    "url": "https://github.com/mosaicjs/Leaflet.CanvasDataGrid/issues"
   },
   "devDependencies": {
     "babel-core": "^5.8.21",
