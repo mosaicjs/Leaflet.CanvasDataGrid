@@ -248,8 +248,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    child = child.nextSibling;
 	                }
 	                for (var i = 0; i < toRemove.length; i++) {
-	                    console.log('toRemove:', toRemove[i]);
-	                    // L.DomUtil.remove(toRemove[i]);
+	                    L.DomUtil.remove(toRemove[i]);
 	                }
 	            }
 	        }
