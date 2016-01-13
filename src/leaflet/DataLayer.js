@@ -40,7 +40,7 @@ var DataLayer = ParentLayer.extend({
                 bounds.getNorth() ];
         var origin = [ bbox[0], bbox[3] ];
 
-        var pad = this._getTilePad();
+        var pad = this._getTilePad(tilePoint);
         var deltaLeft = Math.abs(bbox[0] - bbox[2]) * pad[0];
         var deltaBottom = Math.abs(bbox[1] - bbox[3]) * pad[1];
         var deltaRight = Math.abs(bbox[0] - bbox[2]) * pad[2];
@@ -61,7 +61,7 @@ var DataLayer = ParentLayer.extend({
             imageMaskIndex : this._getImageMaskIndex
         });
         var map = this._map;
-        var provider = this.options.provider;
+        var provider = this._getDataProvider();
         var renderer = new GeometryRenderer({
             context : context,
             tileSize : tileSize,
@@ -89,7 +89,7 @@ var DataLayer = ParentLayer.extend({
         canvas.context = context;
         canvas.renderer = renderer;
 
-        var style = this.options.style;
+        var style = this._getStyleProvider();
         provider.loadData({
             bbox : bbox,
             tilePoint : tilePoint
@@ -98,13 +98,17 @@ var DataLayer = ParentLayer.extend({
                 return done(err);
             }
             if (data) {
+                var drawOptions = {
+                    tilePoint : tilePoint,
+                    map : this._map
+                };
                 if (typeof data.forEach === 'function') {
                     data.forEach(function(d, i) {
-                        renderer.drawFeature(d, style);
+                        renderer.drawFeature(d, style, drawOptions);
                     })
                 } else if (data.length) {
                     for (var i = 0; i < data.length; i++) {
-                        renderer.drawFeature(data[i], style);
+                        renderer.drawFeature(data[i], style, drawOptions);
                     }
                 }
             }
@@ -117,6 +121,16 @@ var DataLayer = ParentLayer.extend({
     },
 
     // -----------------------------------------------------------------------
+
+    _getDataProvider : function() {
+        return this.options.provider;
+    },
+
+    _getStyleProvider : function() {
+        return this.options.style;
+    },
+
+    // -----------------------------------------------------------------------
     _newCanvas : function(w, h) {
         var canvas = document.createElement('canvas');
         canvas.width = w;
@@ -125,36 +139,68 @@ var DataLayer = ParentLayer.extend({
     },
 
     _getImageMaskIndex : function(image, options) {
-        if (!this.maskIndex) {
-            this.maskIndex = {};
+        var index = this.options.imageIndex;
+        if (typeof index === 'function') {
+            this._getImageMaskIndex = index.bind(this);
+        } else {
+            this._getImageMaskIndex = function() {
+                return index;
+            }.bind(this);
         }
-        return this.maskIndex;
+        return this._getImageMaskIndex(image, options);
     },
 
     // -----------------------------------------------------------------------
 
     _onZoomStart : function(ev) {
-        this._prevLevel = this._level;
     },
     _onZoomEnd : function(ev) {
-        if (this._prevLevel && this._prevLevel.zoom !== this._level.zoom) {
-            setTimeout(function() {
-                if (!this._prevLevel)
-                    return;
-                if (this._prevLevel.zoom === this._map.getZoom())
-                    return;
-                L.DomUtil.remove(this._prevLevel.el);
-                delete this._prevLevel;
-            }.bind(this), 10);
+        var that = this;
+        function cleanLevel() {
+            var el = that._level.el;
+            var parentEl = el.parentNode;
+            if (parentEl) {
+                var child = parentEl.firstChild;
+                var toRemove = [];
+                while (child) {
+                    if (child !== el) {
+                        toRemove.push(child);
+                    }
+                    child = child.nextSibling;
+                }
+                for (var i = 0; i < toRemove.length; i++) {
+                    console.log('toRemove:', toRemove[i]);
+                    // L.DomUtil.remove(toRemove[i]);
+                }
+            }
         }
+        function reschedule() {
+            if (that._cleanupId) {
+                clearTimeout(that._cleanupId);
+                delete that._cleanupId;
+            }
+            var timeoutId = that._cleanupId = setTimeout(function() {
+                if (timeoutId !== that._cleanupId)
+                    return;
+                delete that._cleanupId;
+                cleanLevel.call(that);
+            }, 10);
+        }
+        reschedule();
     },
 
-    _getTilePad : function() {
+    _getTilePad : function(tilePoint) {
         // left, bottom, right, top
         // west, south, east, north
-        var pad = this.options.tilePad || [ 0.2, 0.2, 0.2, 0.2 ];
+        var tilePad = this.options.tilePad;
+        if (typeof tilePad === 'function') {
+            tilePad = tilePad({
+                tilePoint : tilePoint
+            });
+        }
+        var pad = tilePad || [ 0.2, 0.2, 0.2, 0.2 ];
         return pad;
-        
+
     },
 
     _getDataByCoordinates : function(latlng) {

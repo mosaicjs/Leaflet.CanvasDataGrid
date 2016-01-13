@@ -1,22 +1,29 @@
-loadImages(
-        {
-            images : {
-                "Peinture" : "./node_modules/open-iconic/svg/account-login.svg",
-                "Objets d'art" : "./node_modules/open-iconic/svg/account-login.svg",
-                "Sciences" : "./node_modules/open-iconic/svg/account-login.svg",
-                "Archéologie" : "./node_modules/open-iconic/svg/account-login.svg",
-                "Art contemporain" : "./node_modules/open-iconic/svg/account-login.svg",
-                "Autre" : "./node_modules/open-iconic/svg/account-login.svg"
-            },
-            width : 32,
-            height : 32,
-        }, function(err, images) {
-            main({
-                container : document.getElementById('map'),
-                resources : window.DATA,
-                images : images
-            });
-        });
+var imageUrls = {
+    "Peinture" : "./node_modules/open-iconic/svg/brush.svg",
+    "Objets d'art" : "./node_modules/open-iconic/svg/brush.svg",
+    "Sciences" : "./node_modules/open-iconic/svg/bolt.svg",
+    "Archéologie" : "./node_modules/open-iconic/svg/heart.svg",
+    "Art contemporain" : "./node_modules/open-iconic/svg/eye.svg",
+    "Autre" : "./node_modules/open-iconic/svg/map-marker.svg"
+};
+var colors = {
+    'bibliotheque' : 'red',
+    'artmusee' : 'blue',
+    'musee' : 'yellow'
+};
+
+loadImages({
+    images : imageUrls,
+    width : 32,
+    height : 32,
+}, function(err, images) {
+    main({
+        container : document.getElementById('map'),
+        resources : window.DATA,
+        images : images,
+        colors : colors
+    });
+});
 
 function loadImages(options, callback) {
     var result = {};
@@ -27,9 +34,12 @@ function loadImages(options, callback) {
     var keys = Object.keys(images);
     for (var i = 0; i < keys.length; i++) {
         (function(key, svg) { // We need it!
-            svgToCanvas(svg, w, h, function(err, canvas) {
+            svgToCanvas(svg, function(err, canvas) {
                 counter++;
-                result[key] = canvas;
+                result[key] = {
+                    svg : svg,
+                    canvas : canvas
+                };
                 if (counter == keys.length) {
                     callback(null, result);
                 }
@@ -38,16 +48,9 @@ function loadImages(options, callback) {
     }
 }
 
-function svgToCanvas(svg, width, height, callback) {
+function svgToCanvas(svg, callback) {
     var canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
     canvg(canvas, svg, {
-        offsetX : 0,
-        offsetY : 0,
-        // scaleWidth : width,
-        // scaleHeight : height,
-        ignoreDimensions : true,
         renderCallback : function() {
             callback(null, canvas);
         }
@@ -58,7 +61,7 @@ function main(options) {
     var mapContainer = options.container;
     var resources = options.resources;
 
-    function getData(key) {
+    function getTagAttr(key) {
         var value = mapContainer.getAttribute('data-' + key);
         if (!value)
             return null;
@@ -68,6 +71,41 @@ function main(options) {
             return value;
         }
     }
+    function getGeometry(r) {
+        return r.x.geometry;
+    }
+    function getProperties(r) {
+        return r.x.properties;
+    }
+    function getResourceType(r) {
+        var properties = getProperties(r);
+        return properties ? properties.category : null;
+    }
+    function getResourceCategory(r) {
+        var properties = getProperties(r);
+        if (!properties)
+            return;
+        var name = properties.name || '';
+        name = name.toLowerCase();
+        if (name.indexOf('biblio') >= 0) {
+            return 'bibliotheque';
+        } else if (name.indexOf('art') >= 0) {
+            return 'artmusee';
+        }
+        return 'musee';
+    }
+    function getMarkerSize(zoom) {
+        var baseZoom = 14;
+        var baseWidth = 32;
+        var baseHeight = 32;
+        var minWidth = 8;
+        var minHeight = 8;
+        var k = Math.pow(2, zoom - baseZoom);
+        return {
+            x : Math.max(minWidth, Math.round(baseWidth * k)),
+            y : Math.max(minHeight, Math.round(baseHeight * k))
+        };
+    }
 
     // Create a map
     var map = L.map(mapContainer);
@@ -75,26 +113,22 @@ function main(options) {
     // Add a background layer for the map.
     // We load the address for the map layer tiles from the map container
     // element ('data-tiles-url' attribute).
-    var tilesUrl = getData('tiles-url');
-    var maxZoom = getData('max-zoom');
-    var attribution = getData('attribution');
+    var tilesUrl = getTagAttr('tiles-url');
+    var maxZoom = getTagAttr('max-zoom');
+    var attribution = getTagAttr('attribution');
     var tilesLayer = L.tileLayer(tilesUrl, {
         attribution : attribution,
         maxZoom : maxZoom
     });
     map.addLayer(tilesLayer);
 
-    function getGeometry(r) {
-        return r.x.geometry;
-    }
-    function getProperties(r) {
-        return r.x.properties;
-    }
     // Load data and transform them into markers with basic interactivity
     // DATA object is defined in the './data.js' script.
     var museumsLayer = newMuseumsLayer({
         images : options.images,
+        colors : options.colors,
         defaultType : 'Autre',
+        defaultCategory : 'musee',
         data : {
             forEach : function(callback) {
                 for (var i = 0; i < resources.features.length; i++) {
@@ -105,7 +139,10 @@ function main(options) {
             }
         },
         getGeometry : getGeometry,
-        getProperties : getProperties
+        getProperties : getProperties,
+        getResourceType : getResourceType,
+        getResourceCategory : getResourceCategory,
+        getMarkerSize : getMarkerSize
     });
 
     // Bind an event listener for this layer
@@ -155,24 +192,28 @@ function main(options) {
     // Visualize the map.
     // We get the map center and zoom from the container element.
     // ('data-center' and 'map-zoom' element attributes)
-    var mapCenter = getData('center');
-    var mapZoom = getData('zoom');
+    var mapCenter = getTagAttr('center');
+    var mapZoom = getTagAttr('zoom');
     var latlng = L.latLng(mapCenter[1], mapCenter[0]);
     map.setView(latlng, mapZoom);
 }
 
 function newMuseumsLayer(options) {
+    // Update images
+    // Update marker size following the zoom (image key: "zoom:type:category")
+    // 
 
-    function drawImage(image, color) {
+    function drawMarker(image, color, zoom) {
         var canvas = document.createElement('canvas');
-        canvas.width = 32;
-        canvas.height = 32;
-        var lineWidth = 1;
+        var imageSize = options.getMarkerSize(zoom);
+        var diameter = Math.min(imageSize.x, imageSize.y);
+        canvas.width = diameter;
+        canvas.height = diameter;
+        var lineWidth = diameter / 10;
         var context = canvas.getContext('2d');
         var centerX = canvas.width / 2;
         var centerY = canvas.height / 2;
-        var radius = Math.round(Math.min(canvas.width / 2, canvas.height / 2))
-                - lineWidth * 2;
+        var radius = diameter / 2 - lineWidth;
 
         context.beginPath();
         context.arc(centerX, centerY, radius, 0, 2 * Math.PI, false);
@@ -182,29 +223,33 @@ function newMuseumsLayer(options) {
         context.strokeStyle = 'gray';
         context.stroke();
 
-        context.fillStyle = 'gray';
-        context.strokeStyle = 'gray';
-        context
-                .drawImage(image, 0, 0, image.width, image.height,
-                        (canvas.width - image.width) / 2,
-                        (canvas.height - image.height) / 2, canvas.width,
-                        canvas.height);
+        // var iconWidth = canvas.width;
+        // var iconHeight = canvas.height;
+        var iconWidth = image.width;
+        var iconHeight = image.height;
+        context.drawImage(image, 0, 0, image.width, image.height, //
+        (canvas.width - iconWidth) / 2, (canvas.height - iconHeight) / 2,
+                iconWidth, iconHeight);
         return canvas;
     }
 
     var cache = {};
-    function getColoredImage(type, color) {
-        var key = options.type + ':' + color;
+    function getColoredMarker(category, type, zoom) {
+        var key = [ zoom, category, type ].join(':');
         var result = cache[key];
         if (!result) {
             var images = options.images;
             var image = images[type] || images[options.defaultType];
-            result = drawImage(image, color);
+
+            var colors = options.colors;
+            var color = colors[category] || colors[options.defaultCategory];
+            result = drawMarker(image.canvas, color, zoom);
             cache[key] = result;
         }
         return result;
     }
 
+    var dataLayer;
     var style = new L.DataLayer.GeometryRendererStyle({
         lineColor : 'red',
         line : {
@@ -218,13 +263,13 @@ function newMuseumsLayer(options) {
             lineColor : 'red',
             lineWidth : 3
         },
-        marker : function(resource, resourceOptions) {
-            var properties = options.getProperties(resource);
-            if (!properties)
+        marker : function(resource, params) {
+            var type = options.getResourceType(resource);
+            var category = options.getResourceCategory(resource);
+            if (!type || !category)
                 return;
-            var type = properties.category;
-            var color = 'yellow';
-            var image = getColoredImage(type, color);
+            var zoom = params.tilePoint.z;
+            var image = getColoredMarker(category, type, zoom);
             return {
                 image : image,
                 anchor : [ image.width / 2, image.height ]
@@ -232,9 +277,21 @@ function newMuseumsLayer(options) {
         }
     });
     var provider = new L.DataLayer.DataProvider(options);
-    var dataLayer = new L.DataLayer({
+    var imageIndex = {};
+    dataLayer = new L.DataLayer({
         style : style,
-        provider : provider
+        provider : provider,
+        imageIndex : function(image, params) {
+            // var properties = options.getProperties(params.data);
+            return imageIndex;
+        },
+        tilePad : function(params) {
+            var markerSize = options.getMarkerSize(params.tilePoint.z);
+            var tileSize = 256;
+            var deltaX = markerSize.x ? tileSize / markerSize.x : 1;
+            var deltaY = markerSize.y ? tileSize / markerSize.y : 1;
+            return [ deltaX, deltaY, deltaX, deltaY ];
+        }
     });
     dataLayer.on('mousemove', function(ev) {
         // console.log('mousemove', ev.data);
