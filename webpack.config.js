@@ -8,8 +8,9 @@ module.exports = {
     module : {
         loaders : [ {
             test : /\.jsx?$/,
-//            exclude : [ /node_modules/ ],
-            include : [ /node_modules\/mosaic\-/, __dirname + '/index.js', __dirname + '/libs' ],
+            // exclude : [ /node_modules/ ],
+            include : [ /node_modules\/mosaic\-/, __dirname + '/index.js',
+                    __dirname + '/src' ],
             loader : 'babel'
         } ]
     },

@@ -62,8 +62,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	L.DataLayer.CanvasIndexingContext = __webpack_require__(3);
 	L.DataLayer.GeometryRenderer = __webpack_require__(9);
 	L.DataLayer.GeometryRendererStyle = __webpack_require__(10);
-	L.DataLayer.IDataProvider = __webpack_require__(11);
+	L.DataLayer.ImageGridIndex = __webpack_require__(7);
+	L.DataLayer.ImageUtils = __webpack_require__(11);
 	L.DataLayer.DataProvider = __webpack_require__(12);
+	L.DataLayer.forEachCoordinate = __webpack_require__(14);
+	L.DataLayer.GridIndex = __webpack_require__(8);
+	L.DataLayer.IDataProvider = __webpack_require__(15);
 	module.exports = L.DataLayer;
 
 /***/ },
@@ -76,6 +80,8 @@ return /******/ (function(modules) { // webpackBootstrap
 /* 2 */
 /***/ function(module, exports, __webpack_require__) {
 
+	'use strict';
+
 	var L = __webpack_require__(1);
 	// var CanvasContext = require('../canvas/CanvasContext');
 	var CanvasIndexingContext = __webpack_require__(3);
@@ -87,13 +93,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	var ParentLayer = L.GridLayer;
 	var DataLayer = ParentLayer.extend({
 
-	    initialize : function(options) {
+	    initialize: function initialize(options) {
 	        ParentLayer.prototype.initialize.apply(this, arguments);
 	        this._newCanvas = this._newCanvas.bind(this);
 	        this._getImageMaskIndex = this._getImageMaskIndex.bind(this);
 	    },
 
-	    onAdd : function(map) {
+	    onAdd: function onAdd(map) {
 	        ParentLayer.prototype.onAdd.apply(this, arguments);
 	        this._map.on('mousemove', this._onMouseMove, this);
 	        this._map.on('click', this._onClick, this);
@@ -101,7 +107,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this._map.on('zoomend', this._onZoomEnd, this);
 	    },
 
-	    onRemove : function() {
+	    onRemove: function onRemove() {
 	        this._map.off('zoomend', this._onZoomEnd, this);
 	        this._map.off('zoomstart', this._onZoomStart, this);
 	        this._map.off('click', this._onClick, this);
@@ -109,22 +115,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	        ParentLayer.prototype.onRemove.apply(this, arguments);
 	    },
 
-	    createTile : function(tilePoint, done) {
+	    createTile: function createTile(tilePoint, done) {
 	        var tileSize = this.getTileSize();
 	        var canvas = this._newCanvas(tileSize.x, tileSize.y);
 
 	        var bounds = this._tileCoordsToBounds(tilePoint);
-	        var bbox = [ bounds.getWest(), bounds.getSouth(), bounds.getEast(),
-	                bounds.getNorth() ];
-	        var origin = [ bbox[0], bbox[3] ];
+	        var bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+	        var origin = [bbox[0], bbox[3]];
 
 	        var pad = this._getTilePad(tilePoint);
 	        var deltaLeft = Math.abs(bbox[0] - bbox[2]) * pad[0];
 	        var deltaBottom = Math.abs(bbox[1] - bbox[3]) * pad[1];
 	        var deltaRight = Math.abs(bbox[0] - bbox[2]) * pad[2];
 	        var deltaTop = Math.abs(bbox[1] - bbox[3]) * pad[3];
-	        bbox = [ bbox[0] - deltaLeft, bbox[1] - deltaBottom,
-	                bbox[2] + deltaRight, bbox[3] + deltaTop ];
+	        bbox = [bbox[0] - deltaLeft, bbox[1] - deltaBottom, bbox[2] + deltaRight, bbox[3] + deltaTop];
 
 	        var size = Math.min(tileSize.x, tileSize.y);
 	        var scale = GeometryRenderer.calculateScale(tilePoint.z, size);
@@ -133,32 +137,30 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var ContextType = CanvasIndexingContext;
 	        // var ContextType = CanvasContext;
 	        var context = new ContextType({
-	            canvas : canvas,
-	            newCanvas : this._newCanvas,
-	            resolution : resolution,
-	            imageMaskIndex : this._getImageMaskIndex
+	            canvas: canvas,
+	            newCanvas: this._newCanvas,
+	            resolution: resolution,
+	            imageMaskIndex: this._getImageMaskIndex
 	        });
 	        var map = this._map;
 	        var provider = this._getDataProvider();
 	        var renderer = new GeometryRenderer({
-	            context : context,
-	            tileSize : tileSize,
-	            scale : scale,
-	            origin : origin,
-	            bbox : bbox,
-	            getGeometry : provider.getGeometry.bind(provider),
-	            project : function(coordinates) {
+	            context: context,
+	            tileSize: tileSize,
+	            scale: scale,
+	            origin: origin,
+	            bbox: bbox,
+	            getGeometry: provider.getGeometry.bind(provider),
+	            project: function project(coordinates) {
 	                function project(point) {
-	                    var p = map.project(L.latLng(point[1], point[0]),
-	                            tilePoint.z);
-	                    return [ p.x, p.y ];
+	                    var p = map.project(L.latLng(point[1], point[0]), tilePoint.z);
+	                    return [p.x, p.y];
 	                }
 	                var origin = renderer.getOrigin();
 	                var o = project(origin);
-	                return coordinates.map(function(point) {
+	                return coordinates.map(function (point) {
 	                    var r = project(point);
-	                    var delta = [ Math.round(r[0] - o[0]),
-	                            Math.round(r[1] - o[1]) ];
+	                    var delta = [Math.round(r[0] - o[0]), Math.round(r[1] - o[1])];
 	                    return delta;
 	                });
 	            }
@@ -169,70 +171,69 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	        var style = this._getStyleProvider();
 	        provider.loadData({
-	            bbox : bbox,
-	            tilePoint : tilePoint
-	        }, function(err, data) {
+	            bbox: bbox,
+	            tilePoint: tilePoint
+	        }, (function (err, data) {
 	            if (err) {
 	                return done(err);
 	            }
 	            if (data) {
 	                var drawOptions = {
-	                    tilePoint : tilePoint,
-	                    map : this._map
+	                    tilePoint: tilePoint,
+	                    map: this._map
 	                };
 	                if (typeof data.forEach === 'function') {
-	                    data.forEach(function(d, i) {
+	                    data.forEach(function (d, i) {
 	                        renderer.drawFeature(d, style, drawOptions);
-	                    })
+	                    });
 	                } else if (data.length) {
 	                    for (var i = 0; i < data.length; i++) {
 	                        renderer.drawFeature(data[i], style, drawOptions);
 	                    }
 	                }
 	            }
-	            setTimeout(function() {
+	            setTimeout(function () {
 	                done(null, canvas);
 	            }, 1);
-	        }.bind(this));
+	        }).bind(this));
 
 	        return canvas;
 	    },
 
 	    // -----------------------------------------------------------------------
 
-	    _getDataProvider : function() {
+	    _getDataProvider: function _getDataProvider() {
 	        return this.options.provider;
 	    },
 
-	    _getStyleProvider : function() {
+	    _getStyleProvider: function _getStyleProvider() {
 	        return this.options.style;
 	    },
 
 	    // -----------------------------------------------------------------------
-	    _newCanvas : function(w, h) {
+	    _newCanvas: function _newCanvas(w, h) {
 	        var canvas = document.createElement('canvas');
 	        canvas.width = w;
 	        canvas.height = h;
 	        return canvas;
 	    },
 
-	    _getImageMaskIndex : function(image, options) {
+	    _getImageMaskIndex: function _getImageMaskIndex(image, options) {
 	        var index = this.options.imageIndex;
 	        if (typeof index === 'function') {
 	            this._getImageMaskIndex = index.bind(this);
 	        } else {
-	            this._getImageMaskIndex = function() {
+	            this._getImageMaskIndex = (function () {
 	                return index;
-	            }.bind(this);
+	            }).bind(this);
 	        }
 	        return this._getImageMaskIndex(image, options);
 	    },
 
 	    // -----------------------------------------------------------------------
 
-	    _onZoomStart : function(ev) {
-	    },
-	    _onZoomEnd : function(ev) {
+	    _onZoomStart: function _onZoomStart(ev) {},
+	    _onZoomEnd: function _onZoomEnd(ev) {
 	        var that = this;
 	        function cleanLevel() {
 	            var el = that._level.el;
@@ -257,9 +258,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	                clearTimeout(that._cleanupId);
 	                delete that._cleanupId;
 	            }
-	            var timeoutId = that._cleanupId = setTimeout(function() {
-	                if (timeoutId !== that._cleanupId)
-	                    return;
+	            var timeoutId = that._cleanupId = setTimeout(function () {
+	                if (timeoutId !== that._cleanupId) return;
 	                delete that._cleanupId;
 	                cleanLevel.call(that);
 	            }, 10);
@@ -267,29 +267,27 @@ return /******/ (function(modules) { // webpackBootstrap
 	        reschedule();
 	    },
 
-	    _getTilePad : function(tilePoint) {
+	    _getTilePad: function _getTilePad(tilePoint) {
 	        // left, bottom, right, top
 	        // west, south, east, north
 	        var tilePad = this.options.tilePad;
 	        if (typeof tilePad === 'function') {
 	            tilePad = tilePad({
-	                tilePoint : tilePoint
+	                tilePoint: tilePoint
 	            });
 	        }
-	        var pad = tilePad || [ 0.2, 0.2, 0.2, 0.2 ];
+	        var pad = tilePad || [0.2, 0.2, 0.2, 0.2];
 	        return pad;
-
 	    },
 
-	    _getDataByCoordinates : function(latlng) {
+	    _getDataByCoordinates: function _getDataByCoordinates(latlng) {
 	        var p = this._map.project(latlng).floor();
 	        var tileSize = this.getTileSize();
 	        var coords = p.unscaleBy(tileSize).floor();
 	        coords.z = this._map.getZoom();
 	        var key = this._tileCoordsToKey(coords);
 	        var slot = this._tiles[key];
-	        if (!slot)
-	            return;
+	        if (!slot) return;
 	        var tile = slot.el;
 	        var x = p.x % tileSize.x;
 	        var y = p.y % tileSize.y;
@@ -297,7 +295,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        return data;
 	    },
 
-	    _onClick : function(ev) {
+	    _onClick: function _onClick(ev) {
 	        var data = this._getDataByCoordinates(ev.latlng);
 	        if (!!data) {
 	            ev.array = data;
@@ -306,7 +304,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	    },
 
-	    _onMouseMove : function(ev) {
+	    _onMouseMove: function _onMouseMove(ev) {
 	        var data = this._getDataByCoordinates(ev.latlng);
 	        if (!!data) {
 	            ev.array = data;
@@ -318,7 +316,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	    },
 
-	    _setMouseOverStyle : function(set) {
+	    _setMouseOverStyle: function _setMouseOverStyle(set) {
 	        set = !!set;
 	        if (!!this._mouseover !== set) {
 	            var delta = set ? 1 : -1;
@@ -338,10 +336,11 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	module.exports = DataLayer;
 
-
 /***/ },
 /* 3 */
 /***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
 
 	var extend = __webpack_require__(4);
 	var CanvasContext = __webpack_require__(5);
@@ -368,7 +367,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	     *            associated with data; by default it is 4x4 pixel areas
 	     *            (resolution = 4)
 	     */
-	    initialize : function(options) {
+	    initialize: function initialize(options) {
 	        CanvasContext.prototype.initialize.apply(this, arguments);
 	        // Re-define a method returning unique image identifiers.
 	        if (typeof this.options.getImageKey === 'function') {
@@ -380,9 +379,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Draws the specified image in the given position on the underlying canvas.
 	     */
-	    drawImage : function(image, position, options) {
-	        if (!image || !position)
-	            return;
+	    drawImage: function drawImage(image, position, options) {
+	        if (!image || !position) return;
 	        var x = position[0];
 	        var y = position[1];
 	        // Draw the image on the canvas
@@ -391,20 +389,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.index.indexImage(image, x, y, options);
 	    },
 
-	    _drawOnCanvasContext : function(options, f) {
+	    _drawOnCanvasContext: function _drawOnCanvasContext(options, f) {
 	        // Create new canvas where the polygon should be drawn
 	        var canvas = this._newCanvas();
 	        var g = canvas.getContext('2d');
 	        var ok = f.call(this, g);
 	        if (ok) {
-	            this.drawImage(canvas, [ 0, 0 ], options);
+	            this.drawImage(canvas, [0, 0], options);
 	        }
 	    },
 
 	    /**
 	     * Creates and returns a new canvas used to draw individual features.
 	     */
-	    _newCanvas : function() {
+	    _newCanvas: function _newCanvas() {
 	        var canvas;
 	        var width = this._canvas.width;
 	        var height = this._canvas.height;
@@ -421,7 +419,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Returns data associated with the specified position on the canvas.
 	     */
-	    getData : function(x, y) {
+	    getData: function getData(x, y) {
 	        return this.index.getData(x, y);
 	    },
 
@@ -429,51 +427,53 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * Returns all data objects associated with the specified position on the
 	     * canvas.
 	     */
-	    getAllData : function(x, y) {
+	    getAllData: function getAllData(x, y) {
 	        return this.index.getAllData(x, y);
 	    },
 
 	    /**
 	     * Sets data in the specified position on the canvas.
 	     */
-	    setData : function(x, y, data) {
+	    setData: function setData(x, y, data) {
 	        return this.index.setData(x, y, data);
 	    },
 
 	    /**
 	     * Removes all data from internal indexes and cleans up underlying canvas.
 	     */
-	    reset : function() {
+	    reset: function reset() {
 	        var g = this._context;
 	        g.clearRect(0, 0, this._canvas.width, this._canvas.height);
 	        this.index.reset();
-	    },
+	    }
 
 	});
 	module.exports = CanvasIndexingContext;
-
 
 /***/ },
 /* 4 */
 /***/ function(module, exports) {
 
+	"use strict";
+
 	module.exports = function extend(to) {
 	    var len = arguments.length;
 	    for (var i = 1; i < len; i++) {
 	        var from = arguments[i];
-	        for ( var key in from) {
+	        for (var key in from) {
 	            if (from.hasOwnProperty(key)) {
 	                to[key] = from[key];
 	            }
 	        }
 	    }
 	    return to;
-	}
-
+	};
 
 /***/ },
 /* 5 */
 /***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
 
 	var simplify = __webpack_require__(6);
 
@@ -487,7 +487,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	CanvasContext.prototype = {
 
 	    /** Initializes this object. */
-	    initialize : function(options) {
+	    initialize: function initialize(options) {
 	        this.options = options || {};
 	        this._canvas = this.options.canvas;
 	        this._context = this._canvas.getContext('2d');
@@ -498,8 +498,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Returns an array [width, height] for the underlying canvas.
 	     */
-	    getCanvasSize : function() {
-	        return [ this._canvas.width, this._canvas.height ];
+	    getCanvasSize: function getCanvasSize() {
+	        return [this._canvas.width, this._canvas.height];
 	    },
 
 	    /**
@@ -513,8 +513,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	     *            options object containing "data" field to associate with the
 	     *            image
 	     */
-	    drawImage : function(image, position, options) {
-	        this._drawOnCanvasContext(options, function(g) {
+	    drawImage: function drawImage(image, position, options) {
+	        this._drawOnCanvasContext(options, function (g) {
 	            g.drawImage(image, position[0], position[1]);
 	            return true;
 	        });
@@ -526,11 +526,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Draws a line defined by the specified sequence of points.
 	     */
-	    drawLine : function(points, options) {
+	    drawLine: function drawLine(points, options) {
 	        var strokeStyles = this._getStrokeStyles(options);
-	        if (!strokeStyles)
-	            return;
-	        this._drawOnCanvasContext(options, function(g) {
+	        if (!strokeStyles) return;
+	        this._drawOnCanvasContext(options, function (g) {
 	            // Simplify point sequence
 	            points = this._simplify(points);
 	            // Trace the line
@@ -541,15 +540,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Draws polygons with holes on the canvas.
 	     */
-	    drawPolygon : function(polygons, holes, options) {
+	    drawPolygon: function drawPolygon(polygons, holes, options) {
 	        // Get styles
 	        var fillStyles = this._getFillStyles(options);
 	        var strokeStyles = this._getStrokeStyles(options);
 	        // Return if there is no styles defined for these polygons
-	        if (!fillStyles && !strokeStyles)
-	            return;
+	        if (!fillStyles && !strokeStyles) return;
 	        // Create new canvas where the polygon should be drawn
-	        this._drawOnCanvasContext(options, function(g) {
+	        this._drawOnCanvasContext(options, function (g) {
 	            var i;
 	            // Simplify lines
 	            polygons = this._simplify(polygons);
@@ -563,8 +561,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            if (fillStyles) {
 	                this._setCanvasStyles(g, fillStyles);
 	                if (fillStyles._pattern) {
-	                    g.fillStyle = g
-	                            .createPattern(fillStyles._pattern, "repeat");
+	                    g.fillStyle = g.createPattern(fillStyles._pattern, "repeat");
 	                }
 	                g.beginPath();
 	                this._trace(g, polygons[0]);
@@ -601,11 +598,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Draws lines with the specified coordinates and styles.
 	     */
-	    _drawLines : function(g, coords, styles) {
-	        if (!styles)
-	            return false;
-	        if (!coords.length)
-	            return false;
+	    _drawLines: function _drawLines(g, coords, styles) {
+	        if (!styles) return false;
+	        if (!coords.length) return false;
 	        g.globalCompositeOperation = 'source-over';
 	        this._setCanvasStyles(g, styles);
 	        g.beginPath();
@@ -625,9 +620,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * @param coords
 	     *            a sequence of coordinates to trace
 	     */
-	    _trace : function(g, coords) {
-	        if (!coords || !coords.length)
-	            return;
+	    _trace: function _trace(g, coords) {
+	        if (!coords || !coords.length) return;
 	        g.moveTo(coords[0][0], coords[0][1]);
 	        for (var i = 1; i < coords.length; i++) {
 	            g.lineTo(coords[i][0], coords[i][1]);
@@ -635,7 +629,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    /** Simplifies the given line. */
-	    _simplify : function(coords) {
+	    _simplify: function _simplify(coords) {
 	        var tolerance = this.options.tolerance || 0.8;
 	        var enableHighQuality = !!this.options.highQuality;
 	        var points = simplify(coords, tolerance, enableHighQuality);
@@ -647,16 +641,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * object. Returns <code>null</code> if the options do not contain
 	     * required styles.
 	     */
-	    _getFillStyles : function(options) {
+	    _getFillStyles: function _getFillStyles(options) {
 	        var styles = {};
 	        styles.fillStyle = options.fillColor || options.color || 'blue';
-	        styles.globalAlpha = options.globalAlpha || options.fillOpacity
-	                || options.opacity || 0;
+	        styles.globalAlpha = options.globalAlpha || options.fillOpacity || options.opacity || 0;
 	        if (options.fillImage) {
 	            styles._pattern = options.fillImage;
 	        }
-	        if (this._isEmptyValue(styles.globalAlpha) && !styles._pattern)
-	            return null;
+	        if (this._isEmptyValue(styles.globalAlpha) && !styles._pattern) return null;
 	        return styles;
 	    },
 
@@ -665,7 +657,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * style object. Returns <code>null</code> if options do not contain
 	     * required styles.
 	     */
-	    _getStrokeStyles : function(options) {
+	    _getStrokeStyles: function _getStrokeStyles(options) {
 	        var styles = {};
 	        styles.strokeStyle = options.lineColor || options.color || 'blue';
 	        styles.globalAlpha = options.lineOpacity || options.opacity || 0;
@@ -673,39 +665,36 @@ return /******/ (function(modules) { // webpackBootstrap
 	        styles.lineCap = options.lineCap || 'round'; // 'butt|round|square'
 	        styles.lineJoin = options.lineJoin || 'round'; // 'miter|round|bevel'
 	        if (this._isEmptyValue(styles.lineWidth) || //
-	        this._isEmptyValue(styles.globalAlpha))
-	            return null;
+	        this._isEmptyValue(styles.globalAlpha)) return null;
 	        return styles;
 	    },
 
 	    /**
 	     * Returns <code>true</code> if the specified value is 0 or undefined.
 	     */
-	    _isEmptyValue : function(val) {
+	    _isEmptyValue: function _isEmptyValue(val) {
 	        return val === undefined || val === 0 || val === '';
 	    },
 
 	    /**
 	     * Copies styles from the specified style object to the canvas context.
 	     */
-	    _setCanvasStyles : function(g, styles) {
-	        for ( var key in styles) {
-	            if (!key || key[0] === '_')
-	                continue;
+	    _setCanvasStyles: function _setCanvasStyles(g, styles) {
+	        for (var key in styles) {
+	            if (!key || key[0] === '_') continue;
 	            g[key] = styles[key];
 	        }
 	    },
 
 	    // -----------------------------------------------------------------------
 
-	    _drawOnCanvasContext : function(options, f) {
+	    _drawOnCanvasContext: function _drawOnCanvasContext(options, f) {
 	        f.call(this, this._context);
-	    },
+	    }
 
 	};
 
 	module.exports = CanvasContext;
-
 
 /***/ },
 /* 6 */
@@ -848,6 +837,8 @@ return /******/ (function(modules) { // webpackBootstrap
 /* 7 */
 /***/ function(module, exports, __webpack_require__) {
 
+	'use strict';
+
 	var GridIndex = __webpack_require__(8);
 	var extend = __webpack_require__(4);
 
@@ -860,19 +851,17 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * Adds all pixels occupied by the specified image to a data mask associated
 	     * with canvas.
 	     */
-	    indexImage : function(image, x, y, options) {
+	    indexImage: function indexImage(image, x, y, options) {
 	        var result = false;
 	        var data = options.data;
-	        if (!data)
-	            return result;
+	        if (!data) return result;
 	        var mask = this._getImageMask(image, options);
 	        var imageMaskWidth = this._getMaskX(image.width);
 	        var maskShiftX = this._getMaskX(x);
 	        var maskShiftY = this._getMaskY(y);
 	        for (var i = 0; i < mask.length; i++) {
-	            if (!mask[i])
-	                continue;
-	            var maskX = maskShiftX + (i % imageMaskWidth);
+	            if (!mask[i]) continue;
+	            var maskX = maskShiftX + i % imageMaskWidth;
 	            var maskY = maskShiftY + Math.floor(i / imageMaskWidth);
 	            var key = this._getIndexKey(maskX, maskY);
 	            this._addDataToIndex(key, options);
@@ -890,7 +879,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * 'stampted' with a new identifier using the ImageGridIndex.stampImage
 	     * method..
 	     */
-	    stampImage : function(image) {
+	    stampImage: function stampImage(image) {
 	        return ImageGridIndex.stampImage(image);
 	    },
 
@@ -899,7 +888,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Returns a mask corresponding to the specified image.
 	     */
-	    _getImageMask : function(image, options) {
+	    _getImageMask: function _getImageMask(image, options) {
 	        var imageKey = this.stampImage(image);
 	        var maskIndex = this._getImageMaskIndex(image, options);
 	        if (!maskIndex || !imageKey) {
@@ -918,10 +907,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * canvas. This method could be overloaded to implement a global index of
 	     * image masks.
 	     */
-	    _getImageMaskIndex : function(image, options) {
+	    _getImageMaskIndex: function _getImageMaskIndex(image, options) {
 	        var index = options.imageMaskIndex || this.options.imageMaskIndex;
-	        if (!index)
-	            return;
+	        if (!index) return;
 	        if (typeof index === 'function') {
 	            index = index(image, options);
 	        }
@@ -929,14 +917,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    /** Creates and returns an image mask. */
-	    _buildImageMask : function(image) {
+	    _buildImageMask: function _buildImageMask(image) {
 	        var maskWidth = this._getMaskX(image.width);
 	        var maskHeight = this._getMaskY(image.height);
 	        var buf = this._getResizedImageBuffer(image, maskWidth, maskHeight);
 	        var mask = new Array(maskWidth * maskHeight);
 	        for (var y = 0; y < maskHeight; y++) {
 	            for (var x = 0; x < maskWidth; x++) {
-	                var idx = (y * maskWidth + x);
+	                var idx = y * maskWidth + x;
 	                var filled = this._checkFilledPixel(buf, idx);
 	                mask[idx] = filled ? 1 : 0;
 	            }
@@ -947,7 +935,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Returns <code>true</code> if the specified pixel is not transparent
 	     */
-	    _checkFilledPixel : function(buf, pos) {
+	    _checkFilledPixel: function _checkFilledPixel(buf, pos) {
 	        // Check that the alpha channel is not 0 which means that this
 	        // pixel is not transparent and it should not be associated with data.
 	        // 4 bytes per pixel; RGBA - forth byte is an alpha channel.
@@ -956,10 +944,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    /** Returns a raw data for the resized image. */
-	    _getResizedImageBuffer : function(image, width, height) {
+	    _getResizedImageBuffer: function _getResizedImageBuffer(image, width, height) {
 	        var g;
-	        if (image.tagName === 'CANVAS' && image.width === width
-	                && image.height === height) {
+	        if (image.tagName === 'CANVAS' && image.width === width && image.height === height) {
 	            g = image.getContext('2d');
 	        } else {
 	            var canvas = this._newCanvas(width, height);
@@ -972,7 +959,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        return data;
 	    },
 
-	    _newCanvas : function(width, height) {
+	    _newCanvas: function _newCanvas(width, height) {
 	        var canvas;
 	        if (this.options.newCanvas) {
 	            canvas = this.options.newCanvas(width, height);
@@ -986,7 +973,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	});
 
-	ImageGridIndex.stampImage = function(image) {
+	ImageGridIndex.stampImage = function (image) {
 	    var key = image['image-id'];
 	    if (!key) {
 	        var that = ImageGridIndex;
@@ -994,13 +981,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	        key = image['image-id'] = 'i' + that._imageIdCounter;
 	    }
 	    return key;
-	}
+	};
 	module.exports = ImageGridIndex;
-
 
 /***/ },
 /* 8 */
 /***/ function(module, exports) {
+
+	'use strict';
 
 	function GridIndex() {
 	    this.initialize.apply(this, arguments);
@@ -1008,7 +996,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	GridIndex.prototype = {
 
-	    initialize : function(options) {
+	    initialize: function initialize(options) {
 	        this.options = options || {};
 	        var resolution = this.options.resolution || 4;
 	        this.options.resolutionX = this.options.resolutionX || resolution;
@@ -1020,7 +1008,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Returns data associated with the specified position on the canvas.
 	     */
-	    getData : function(x, y) {
+	    getData: function getData(x, y) {
 	        var array = this.getAllData(x, y);
 	        return array && array.length ? array[0] : undefined;
 	    },
@@ -1029,7 +1017,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * Returns all data objects associated with the specified position on the
 	     * canvas.
 	     */
-	    getAllData : function(x, y) {
+	    getAllData: function getAllData(x, y) {
 	        var maskX = this._getMaskX(x);
 	        var maskY = this._getMaskY(y);
 	        var key = this._getIndexKey(maskX, maskY);
@@ -1044,21 +1032,21 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * @param options.data
 	     *            a data object to set
 	     */
-	    addData : function(x, y, options) {
+	    addData: function addData(x, y, options) {
 	        var maskX = this._getMaskX(x);
 	        var maskY = this._getMaskY(y);
 	        var key = this._getIndexKey(maskX, maskY);
 	        return this._addDataToIndex(key, options);
 	    },
 
-	    reset : function() {
+	    reset: function reset() {
 	        this._dataIndex = {};
 	    },
 
 	    /**
 	     * Transforms a X coordinate on canvas to X coordinate in the mask.
 	     */
-	    _getMaskX : function(x) {
+	    _getMaskX: function _getMaskX(x) {
 	        var resolutionX = this.options.resolutionX;
 	        return Math.round(x / resolutionX);
 	    },
@@ -1066,7 +1054,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Transforms Y coordinate on canvas to Y coordinate in the mask.
 	     */
-	    _getMaskY : function(y) {
+	    _getMaskY: function _getMaskY(y) {
 	        var resolutionY = this.options.resolutionY;
 	        return Math.round(y / resolutionY);
 	    },
@@ -1079,10 +1067,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * @param replace
 	     * @returns
 	     */
-	    _addDataToIndex : function(key, options) {
+	    _addDataToIndex: function _addDataToIndex(key, options) {
 	        var data = options.data;
-	        if (!data)
-	            return;
+	        if (!data) return;
 	        var array = this._dataIndex[key];
 	        if (!array || options.replace) {
 	            array = this._dataIndex[key] = [];
@@ -1090,17 +1077,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	        array.unshift(data);
 	    },
 
-	    _getIndexKey : function(maskX, maskY) {
+	    _getIndexKey: function _getIndexKey(maskX, maskY) {
 	        return maskX + ':' + maskY;
-	    },
-	}
+	    }
+	};
 
 	module.exports = GridIndex;
-
 
 /***/ },
 /* 9 */
 /***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
 
 	var extend = __webpack_require__(4);
 
@@ -1113,7 +1101,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	extend(GeometryRenderer.prototype, {
 
 	    /** Initializes fields of this object. */
-	    initialize : function(options) {
+	    initialize: function initialize(options) {
 	        this.options = options || {};
 	        this.context = this.options.context;
 	        if (!this.context) {
@@ -1132,31 +1120,28 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * @param styles
 	     *            style provider defining how features should be visualized
 	     */
-	    drawFeature : function(resource, styles, options) {
+	    drawFeature: function drawFeature(resource, styles, options) {
 	        var that = this;
 	        var geometry = this._getGeometry(resource, options);
-	        if (!geometry)
-	            return;
+	        if (!geometry) return;
 	        drawGeometry(geometry);
 	        return;
 
 	        function drawMarker(point, index) {
-	            var markerStyle = styles.getMarkerStyle(resource, extend({},
-	                    options, {
-	                        index : index,
-	                        point : point,
-	                        data : resource
-	                    }));
-	            if (!markerStyle || !markerStyle.image)
-	                return;
+	            var markerStyle = styles.getMarkerStyle(resource, extend({}, options, {
+	                index: index,
+	                point: point,
+	                data: resource
+	            }));
+	            if (!markerStyle || !markerStyle.image) return;
 
-	            var pos = [ point[0], point[1] ]; // Copy
+	            var pos = [point[0], point[1]]; // Copy
 	            if (markerStyle.anchor) {
 	                pos[0] -= markerStyle.anchor[0];
 	                pos[1] -= markerStyle.anchor[1];
 	            }
 	            that.context.drawImage(markerStyle.image, pos, extend({
-	                data : resource
+	                data: resource
 	            }, markerStyle));
 	        }
 	        function drawMarkers(points) {
@@ -1169,14 +1154,14 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	        function drawLine(points, index) {
 	            var lineStyle = styles.getLineStyle(resource, extend({}, options, {
-	                points : points,
-	                index : index,
-	                data : resource
+	                points: points,
+	                index: index,
+	                data: resource
 	            }));
 	            if (lineStyle) {
 	                points = that._getProjectedPoints(points);
 	                that.context.drawLine(points, extend({
-	                    data : resource
+	                    data: resource
 	                }, lineStyle));
 	            }
 	            // drawMarker([ 0, 0 ]);
@@ -1191,15 +1176,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    holes.push(hole);
 	                }
 	            }
-	            var polygonStyle = styles.getPolygonStyle(resource, extend({},
-	                    options, {
-	                        coords : coords,
-	                        index : index,
-	                        data : resource
-	                    }));
+	            var polygonStyle = styles.getPolygonStyle(resource, extend({}, options, {
+	                coords: coords,
+	                index: index,
+	                data: resource
+	            }));
 	            if (polygonStyle) {
-	                that.context.drawPolygon([ polygons ], holes, extend({
-	                    data : resource
+	                that.context.drawPolygon([polygons], holes, extend({
+	                    data: resource
 	                }, polygonStyle));
 	            }
 	            // drawMarker([ 0, 0 ]);
@@ -1209,42 +1193,42 @@ return /******/ (function(modules) { // webpackBootstrap
 	            var i, geom;
 	            var coords = geometry.coordinates;
 	            switch (geometry.type) {
-	            case 'Point':
-	                drawMarkers([ coords ]);
-	                break;
-	            case 'MultiPoint':
-	                drawMarkers(coords);
-	                break;
-	            case 'LineString':
-	                drawLine(coords);
-	                break;
-	            case 'MultiLineString':
-	                for (i = 0; i < coords.length; i++) {
-	                    var points = that._getProjectedPoints(context, coords[i]);
-	                    drawLine(points, i);
-	                }
-	                break;
-	            case 'Polygon':
-	                drawPolygon(coords);
-	                break;
-	            case 'MultiPolygon':
-	                for (i = 0; i < coords.length; i++) {
-	                    drawPolygon(coords[i], i);
-	                }
-	                break;
-	            case 'GeometryCollection':
-	                geoms = geometry.geometries;
-	                for (i = 0, len = geoms.length; i < len; i++) {
-	                    drawGeometry(geoms[i]);
-	                }
-	                break;
+	                case 'Point':
+	                    drawMarkers([coords]);
+	                    break;
+	                case 'MultiPoint':
+	                    drawMarkers(coords);
+	                    break;
+	                case 'LineString':
+	                    drawLine(coords);
+	                    break;
+	                case 'MultiLineString':
+	                    for (i = 0; i < coords.length; i++) {
+	                        var points = that._getProjectedPoints(context, coords[i]);
+	                        drawLine(points, i);
+	                    }
+	                    break;
+	                case 'Polygon':
+	                    drawPolygon(coords);
+	                    break;
+	                case 'MultiPolygon':
+	                    for (i = 0; i < coords.length; i++) {
+	                        drawPolygon(coords[i], i);
+	                    }
+	                    break;
+	                case 'GeometryCollection':
+	                    geoms = geometry.geometries;
+	                    for (i = 0, len = geoms.length; i < len; i++) {
+	                        drawGeometry(geoms[i]);
+	                    }
+	                    break;
 	            }
 	        }
 	    },
 
 	    // ------------------------------------------------------------------
 
-	    _getGeometry : function(resource) {
+	    _getGeometry: function _getGeometry(resource) {
 	        if (typeof this.options.getGeometry === 'function') {
 	            return this.options.getGeometry(resource);
 	        }
@@ -1254,11 +1238,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Returns an array of projected points.
 	     */
-	    _getProjectedPoints : function(coordinates) {
+	    _getProjectedPoints: function _getProjectedPoints(coordinates) {
 	        if (typeof this.options.project === 'function') {
-	            this._getProjectedPoints = function(coordinates) {
+	            this._getProjectedPoints = function (coordinates) {
 	                return this.options.project(coordinates);
-	            }
+	            };
 	            return this._getProjectedPoints(coordinates);
 	        }
 	        // FIXME: projected points calculation does not work as expected
@@ -1282,69 +1266,70 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * value is an array with the following buffer size values: [top, right,
 	     * bottom, left].
 	     */
-	    getBufferZoneSize : function() {
+	    getBufferZoneSize: function getBufferZoneSize() {
 	        var buf = this.options.buffer;
-	        if (buf && (typeof buf === 'function')) {
+	        if (buf && typeof buf === 'function') {
 	            buf = buf.apply(this, this);
 	        }
 	        if (!buf) {
 	            var size = this.getTileSize() / 8;
-	            buf = [ size, size, size, size ];
+	            buf = [size, size, size, size];
 	        }
 	        return buf;
 	    },
 
-	    getTransformation : function() {
+	    getTransformation: function getTransformation() {
 	        if (!this._transformation) {
-	            this._transformation = this.options.transformation
-	                    || transform(1 / 180, 0, -1 / 90, 0);
-	            function transform(a, b, c, d) {
+	            var transform = function transform(a, b, c, d) {
 	                return {
-	                    direct : function(x, y, scale) {
-	                        return [ scale * (x * a + b), scale * (y * c + d) ];
+	                    direct: function direct(x, y, scale) {
+	                        return [scale * (x * a + b), scale * (y * c + d)];
 	                    },
-	                    inverse : function(x, y, scale) {
-	                        return [ (x / scale - b) / a, (y / scale - d) / c ];
+	                    inverse: function inverse(x, y, scale) {
+	                        return [(x / scale - b) / a, (y / scale - d) / c];
 	                    }
 	                };
-	            }
+	            };
+
+	            this._transformation = this.options.transformation || transform(1 / 180, 0, -1 / 90, 0);
 	        }
 	        return this._transformation;
 	    },
 
 	    /** Returns the current scale */
-	    getScale : function() {
+	    getScale: function getScale() {
 	        return this.options.scale || 1;
 	    },
 
 	    /** Returns the initial shift */
-	    getOrigin : function() {
-	        return this.options.origin || [ 0, 0 ];
+	    getOrigin: function getOrigin() {
+	        return this.options.origin || [0, 0];
 	    },
 
-	    getTileSize : function() {
+	    getTileSize: function getTileSize() {
 	        return this.options.tileSize || 256;
 	    }
 
 	});
 
 	// defines how the world scales with zoom
-	GeometryRenderer.calculateScale = function(zoom, tileSize) {
+	GeometryRenderer.calculateScale = function (zoom, tileSize) {
 	    tileSize = tileSize || 256;
 	    return tileSize * Math.pow(2, zoom);
 	};
 
-	GeometryRenderer.calculateZoom = function(scale, tileSize) {
+	GeometryRenderer.calculateZoom = function (scale, tileSize) {
 	    tileSize = tileSize || 256;
 	    return Math.log(scale / tileSize) / Math.LN2;
 	};
 
 	module.exports = GeometryRenderer;
 
-
 /***/ },
 /* 10 */
 /***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
 
 	var extend = __webpack_require__(4);
 
@@ -1353,7 +1338,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	}
 	extend(GeometryRenderStyle.prototype, {
 
-	    initialize : function(options) {
+	    initialize: function initialize(options) {
 	        this.options = options || {};
 	    },
 
@@ -1373,64 +1358,78 @@ return /******/ (function(modules) { // webpackBootstrap
 	     *         coordinates of the anchor point of the marker (position on the
 	     *         image corresponding to the coordinates)
 	     */
-	    getMarkerStyle : function(resource, options) {
+	    getMarkerStyle: function getMarkerStyle(resource, options) {
 	        return this._getStyle('marker', resource, options) || {
-	            image : undefined,
-	            anchor : [ 0, 0 ]
+	            image: undefined,
+	            anchor: [0, 0]
 	        };
 	    },
 
-	    getLineStyle : function(resource, options) {
+	    getLineStyle: function getLineStyle(resource, options) {
 	        return this._getStyle('line', resource, options);
 	    },
 
-	    getPolygonStyle : function(resource, options) {
+	    getPolygonStyle: function getPolygonStyle(resource, options) {
 	        return this._getStyle('polygon', resource, options);
 	    },
 
-	    _getStyle : function(key, resource, options) {
+	    _getStyle: function _getStyle(key, resource, options) {
 	        var style = this.options[key];
 	        if (typeof style === 'function') {
 	            style = style.call(this, resource, options);
 	        }
 	        return style;
-	    },
+	    }
 
 	});
 
 	module.exports = GeometryRenderStyle;
 
-
 /***/ },
 /* 11 */
 /***/ function(module, exports) {
 
-	/**
-	 * A simple data provider synchronously indexing the given data using an RTree
-	 * index.
-	 */
-	function IDataProvider() {
-	    if (typeof this.options.getGeometry === 'function') {
-	        this.getGeometry = this.options.getGeometry;
+	"use strict";
+
+	module.exports = {
+
+	    /**
+	     * Draws a simple marker on the specified canvas 2d context.
+	     */
+	    drawMarker: function drawMarker(g, x, y, width, height, radius) {
+	        g.beginPath();
+	        // a
+	        g.moveTo(x + width / 2, y);
+	        // b
+	        g.bezierCurveTo( //
+	        x + width / 2 + radius / 2, y, //
+	        x + width / 2 + radius, y + radius / 2, //
+	        x + width / 2 + radius, y + radius);
+	        // c
+	        g.bezierCurveTo( //
+	        x + width / 2 + radius, y + radius * 2, //
+	        x + width / 2, y + height / 2 + radius / 3, //
+	        x + width / 2, y + height);
+	        // d
+	        g.bezierCurveTo( //
+	        x + width / 2, y + height / 2 + radius / 3, //
+	        x + width / 2 - radius, y + radius * 2, //
+	        x + width / 2 - radius, y + radius);
+	        // e (a)
+	        g.bezierCurveTo( //
+	        x + width / 2 - radius, y + radius / 2, //
+	        x + width / 2 - radius / 2, y + 0, //
+	        x + width / 2, y + 0);
+	        g.closePath();
 	    }
-	    this.options = options || {};
-	}
-	/**
-	 * Loads and returns indexed data contained in the specified bounding box.
-	 */
-	IDataProvider.prototype.loadData = function(options, callback) {
-	    callback(null, this.options.data || []);
-	}
-	IDataProvider.prototype.getGeometry = function(r) {
-	    return r.geometry;
-	}
 
-	module.exports = IDataProvider;
-
+	};
 
 /***/ },
 /* 12 */
 /***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
 
 	var rbush = __webpack_require__(13);
 	var forEachCoordinate = __webpack_require__(14);
@@ -1445,7 +1444,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	DataProvider.prototype = {
 
 	    /** Initializes this object and indexes the initial data set. */
-	    initialize : function(options) {
+	    initialize: function initialize(options) {
 	        this.options = options || {};
 	        if (typeof this.options.getGeometry === 'function') {
 	            this.getGeometry = this.options.getGeometry;
@@ -1454,21 +1453,21 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    /** Sets and indexes the given data */
-	    setData : function(data) {
+	    setData: function setData(data) {
 	        this._indexData(data);
 	    },
 
 	    /**
 	     * Loads and returns indexed data contained in the specified bounding box.
 	     */
-	    loadData : function(options, callback) {
+	    loadData: function loadData(options, callback) {
 	        var that = this;
 	        var data = that._searchInBbox(options.bbox);
 	        callback(null, data);
 	    },
 
 	    /** Indexes the specified data array using a RTree index. */
-	    _indexData : function(data) {
+	    _indexData: function _indexData(data) {
 	        // Data indexing
 	        this._rtree = rbush(9);
 	        data = data || [];
@@ -1493,7 +1492,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    /** Searches resources in the specified bounding box. */
-	    _searchInBbox : function(bbox) {
+	    _searchInBbox: function _searchInBbox(bbox) {
 	        var coords = this._toIndexKey(bbox);
 	        var array = this._rtree.search(coords);
 	        array = this._sortByDistance(array, bbox);
@@ -1508,9 +1507,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Sorts the given data array by Manhattan distance to the origin point
 	     */
-	    _sortByDistance : function(array, bbox) {
+	    _sortByDistance: function _sortByDistance(array, bbox) {
 	        var p = bbox[0];
-	        array.sort(function(a, b) {
+	        array.sort(function (a, b) {
 	            var d1 = Math.abs(a[0] - p[0]) + Math.abs(a[1] - p[1]);
 	            var d2 = Math.abs(b[0] - p[0]) + Math.abs(b[1] - p[1]);
 	            return d1 - d2;
@@ -1521,8 +1520,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * This method transforms a bounding box into a key for RTree index.
 	     */
-	    _toIndexKey : function(bbox) {
-	        bbox = bbox.map(function(v) {
+	    _toIndexKey: function _toIndexKey(bbox) {
+	        bbox = bbox.map(function (v) {
 	            return +v;
 	        });
 	        return bbox;
@@ -1532,30 +1531,25 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * Returns an object defining a bounding box ([south, west, north, east])
 	     * for the specified resource.
 	     */
-	    _getBoundingBox : function(r) {
+	    _getBoundingBox: function _getBoundingBox(r) {
 	        var geometry = this.getGeometry(r);
-	        var extent = [ Infinity, Infinity, -Infinity, -Infinity ];
-	        forEachCoordinate(geometry, function(coord) {
-	            if (extent[0] > coord[0])
-	                extent[0] = coord[0];
-	            if (extent[1] > coord[1])
-	                extent[1] = coord[1];
-	            if (extent[2] < coord[0])
-	                extent[2] = coord[0];
-	            if (extent[3] < coord[1])
-	                extent[3] = coord[1];
+	        var extent = [Infinity, Infinity, -Infinity, -Infinity];
+	        forEachCoordinate(geometry, function (coord) {
+	            if (extent[0] > coord[0]) extent[0] = coord[0];
+	            if (extent[1] > coord[1]) extent[1] = coord[1];
+	            if (extent[2] < coord[0]) extent[2] = coord[0];
+	            if (extent[3] < coord[1]) extent[3] = coord[1];
 	        });
 	        return extent;
 	    },
 
-	    getGeometry : function(r) {
+	    getGeometry: function getGeometry(r) {
 	        return r.geometry;
 	    }
 
 	};
 
 	module.exports = DataProvider;
-
 
 /***/ },
 /* 13 */
@@ -2188,30 +2182,52 @@ return /******/ (function(modules) { // webpackBootstrap
 /* 14 */
 /***/ function(module, exports) {
 
+	'use strict';
+
 	module.exports = function forEach(geometry, callback) {
 	    var j, k, l;
 	    var coords = geometry.coordinates;
 	    if (geometry.type === 'Point') {
 	        callback(coords);
 	    } else if (geometry.type === 'LineString' || geometry.type === 'MultiPoint') {
-	        for (j = 0; j < coords.length; j++)
-	            callback(coords[j]);
-	    } else if (geometry.type === 'Polygon'
-	            || geometry.type === 'MultiLineString') {
-	        var wrapShrink = (geometry.type === 'Polygon') ? 1 : 0;
-	        for (j = 0; j < coords.length; j++)
-	            for (k = 0; k < coords[j].length - wrapShrink; k++)
-	                callback(coords[j][k]);
+	        for (j = 0; j < coords.length; j++) callback(coords[j]);
+	    } else if (geometry.type === 'Polygon' || geometry.type === 'MultiLineString') {
+	        var wrapShrink = geometry.type === 'Polygon' ? 1 : 0;
+	        for (j = 0; j < coords.length; j++) for (k = 0; k < coords[j].length - wrapShrink; k++) callback(coords[j][k]);
 	    } else if (geometry.type === 'MultiPolygon') {
-	        for (j = 0; j < coords.length; j++)
-	            for (k = 0; k < coords[j].length; k++)
-	                for (l = 0; l < coords[j][k].length - 1; l++)
-	                    callback(coords[j][k][l]);
+	        for (j = 0; j < coords.length; j++) for (k = 0; k < coords[j].length; k++) for (l = 0; l < coords[j][k].length - 1; l++) callback(coords[j][k][l]);
 	    } else {
 	        throw new Error('Unknown Geometry Type');
 	    }
-	}
+	};
 
+/***/ },
+/* 15 */
+/***/ function(module, exports) {
+
+	/**
+	 * A simple data provider synchronously indexing the given data using an RTree
+	 * index.
+	 */
+	'use strict';
+
+	function IDataProvider() {
+	    if (typeof this.options.getGeometry === 'function') {
+	        this.getGeometry = this.options.getGeometry;
+	    }
+	    this.options = options || {};
+	}
+	/**
+	 * Loads and returns indexed data contained in the specified bounding box.
+	 */
+	IDataProvider.prototype.loadData = function (options, callback) {
+	    callback(null, this.options.data || []);
+	};
+	IDataProvider.prototype.getGeometry = function (r) {
+	    return r.geometry;
+	};
+
+	module.exports = IDataProvider;
 
 /***/ }
 /******/ ])
