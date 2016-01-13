@@ -48,6 +48,9 @@ DataProvider.prototype = {
                 array.push(coords);
             }
         }
+        if (typeof data === 'function') {
+            data = data();
+        }
         if (typeof data.forEach === 'function') {
             data.forEach(index);
         } else if (data.length) {

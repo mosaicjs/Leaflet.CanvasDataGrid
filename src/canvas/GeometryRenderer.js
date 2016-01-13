@@ -1,4 +1,5 @@
 var extend = require('./extend');
+var GeometryUtils = require('./GeometryUtils');
 
 /**
  * A common interface visualizing data on canvas.
@@ -56,10 +57,13 @@ extend(GeometryRenderer.prototype, {
             }, markerStyle));
         }
         function drawMarkers(points) {
-            points = that._getProjectedPoints(points);
-            for (var i = 0; i < points.length; i++) {
-                var point = points[i];
-                drawMarker(point, i);
+            points = that._getBboxPoints(points);
+            if (points.length) {
+                points = that._getProjectedPoints(points);
+                for (var i = 0; i < points.length; i++) {
+                    var point = points[i];
+                    drawMarker(point, i);
+                }
             }
         }
 
@@ -70,6 +74,7 @@ extend(GeometryRenderer.prototype, {
                 data : resource
             }));
             if (lineStyle) {
+                points = that._getBboxClippedLines(points);
                 points = that._getProjectedPoints(points);
                 that.context.drawLine(points, extend({
                     data : resource
@@ -79,14 +84,6 @@ extend(GeometryRenderer.prototype, {
         }
         //
         function drawPolygon(coords, index) {
-            var polygons = that._getProjectedPoints(coords[0]);
-            var holes = [];
-            for (var i = 1; i < coords.length; i++) {
-                var hole = that._getProjectedPoints(coords[i]);
-                if (hole.length) {
-                    holes.push(hole);
-                }
-            }
             var polygonStyle = styles.getPolygonStyle(resource, extend({},
                     options, {
                         coords : coords,
@@ -94,6 +91,19 @@ extend(GeometryRenderer.prototype, {
                         data : resource
                     }));
             if (polygonStyle) {
+                var clipped = that._getBboxPolygon(coords[0]);
+                var polygons = that._getProjectedPoints(clipped);
+                var holes = [];
+                for (var i = 1; i < coords.length; i++) {
+                    // TODO: clip the hole by bounding box
+                    var clippedHole = that._getBboxPolygon(coords[i]);
+                    if (clippedHole.length) {
+                        var hole = that._getProjectedPoints(clippedHole);
+                        if (hole.length) {
+                            holes.push(hole);
+                        }
+                    }
+                }
                 that.context.drawPolygon([ polygons ], holes, extend({
                     data : resource
                 }, polygonStyle));
@@ -116,8 +126,7 @@ extend(GeometryRenderer.prototype, {
                 break;
             case 'MultiLineString':
                 for (i = 0; i < coords.length; i++) {
-                    var points = that._getProjectedPoints(context, coords[i]);
-                    drawLine(points, i);
+                    drawLine(coords[i], i);
                 }
                 break;
             case 'Polygon':
@@ -140,6 +149,42 @@ extend(GeometryRenderer.prototype, {
 
     // ------------------------------------------------------------------
 
+    _getBboxPoints : function(coords) {
+        if (this.options.bbox) {
+            // coords = GeometryUtils.clipPoints(coords, this.options.bbox);
+        }
+        return coords;
+    },
+
+    _getBboxClippedLines : function(coords) {
+        var clipPolygon = this._getClipPolygon();
+        if (clipPolygon.length) {
+            // coords = GeometryUtils.clipLines(coords, clipPolygon);
+        }
+        return coords;
+    },
+
+    _getBboxPolygon : function(coords) {
+        var clipPolygon = this._getClipPolygon();
+        if (clipPolygon.length) {
+            //            coords = GeometryUtils.clipPolygon(coords, clipPolygon);
+        }
+        return coords;
+    },
+
+    _getClipPolygon : function() {
+        if (this._clipPolygon === undefined) {
+            var clip;
+            if (this.options.bbox) {
+                clip = GeometryUtils.getClippingPolygon(this.options.bbox);
+            }
+            this._clipPolygon = clip || [];
+        }
+        return this._clipPolygon;
+    },
+
+    // ------------------------------------------------------------------
+
     _getGeometry : function(resource) {
         if (typeof this.options.getGeometry === 'function') {
             return this.options.getGeometry(resource);
@@ -157,7 +202,7 @@ extend(GeometryRenderer.prototype, {
             }
             return this._getProjectedPoints(coordinates);
         }
-        // FIXME: projected points calculation does not work as expected
+        // FIXME: projected points calculation do not work as expected
         var t = this.getTransformation();
         var s = this.getScale();
         var origin = this.getOrigin();
@@ -171,23 +216,6 @@ extend(GeometryRenderer.prototype, {
             result.push(point);
         }
         return result;
-    },
-
-    /**
-     * Returns a buffer zone size (in pixels) around the image. The returned
-     * value is an array with the following buffer size values: [top, right,
-     * bottom, left].
-     */
-    getBufferZoneSize : function() {
-        var buf = this.options.buffer;
-        if (buf && (typeof buf === 'function')) {
-            buf = buf.apply(this, this);
-        }
-        if (!buf) {
-            var size = this.getTileSize() / 8;
-            buf = [ size, size, size, size ];
-        }
-        return buf;
     },
 
     getTransformation : function() {

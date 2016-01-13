@@ -39,7 +39,6 @@ var DataLayer = ParentLayer.extend({
         var bbox = [ bounds.getWest(), bounds.getSouth(), bounds.getEast(),
                 bounds.getNorth() ];
         var origin = [ bbox[0], bbox[3] ];
-
         var pad = this._getTilePad(tilePoint);
         var deltaLeft = Math.abs(bbox[0] - bbox[2]) * pad[0];
         var deltaBottom = Math.abs(bbox[1] - bbox[3]) * pad[1];
@@ -67,7 +66,7 @@ var DataLayer = ParentLayer.extend({
             tileSize : tileSize,
             scale : scale,
             origin : origin,
-            bbox : bbox,
+            bbox : [ [ bbox[0], bbox[1] ], [ bbox[2], bbox[3] ] ],
             getGeometry : provider.getGeometry.bind(provider),
             project : function(coordinates) {
                 function project(point) {
@@ -169,8 +168,8 @@ var DataLayer = ParentLayer.extend({
                     child = child.nextSibling;
                 }
                 for (var i = 0; i < toRemove.length; i++) {
-                    console.log('toRemove:', toRemove[i]);
-                    // L.DomUtil.remove(toRemove[i]);
+                    // console.log('toRemove:', toRemove[i]);
+                    L.DomUtil.remove(toRemove[i]);
                 }
             }
         }
@@ -194,7 +193,7 @@ var DataLayer = ParentLayer.extend({
         // west, south, east, north
         var tilePad = this.options.tilePad;
         if (typeof tilePad === 'function') {
-            tilePad = tilePad({
+            tilePad = this.options.tilePad({
                 tilePoint : tilePoint
             });
         }

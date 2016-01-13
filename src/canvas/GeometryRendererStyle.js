@@ -8,7 +8,7 @@ extend(GeometryRenderStyle.prototype, {
     initialize : function(options) {
         this.options = options || {};
     },
-
+    
     /**
      * Returns an object containing a marker image, image anchor point. If there
      * is no image returned then the marker is not shown.

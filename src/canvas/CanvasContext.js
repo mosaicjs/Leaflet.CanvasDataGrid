@@ -1,4 +1,4 @@
-var simplify = require('simplify-js');
+var GeometryUtils = require('./GeometryUtils');
 
 /**
  * This class provides a set of utility methods simplifying data visualization
@@ -161,7 +161,10 @@ CanvasContext.prototype = {
     _simplify : function(coords) {
         var tolerance = this.options.tolerance || 0.8;
         var enableHighQuality = !!this.options.highQuality;
-        var points = simplify(coords, tolerance, enableHighQuality);
+        var points = GeometryUtils.simplify(coords, tolerance, enableHighQuality);
+        console
+                .log(' simplify: ', coords, coords.length, points,
+                        points.length);
         return points;
     },
 
