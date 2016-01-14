@@ -102,6 +102,7 @@ var DataLayer = ParentLayer.extend({
                     tilePoint : tilePoint,
                     map : this._map
                 };
+                data = this._sortData(data, drawOptions);
                 if (typeof data.forEach === 'function') {
                     data.forEach(function(d, i) {
                         renderer.drawFeature(d, style, drawOptions);
@@ -116,11 +117,21 @@ var DataLayer = ParentLayer.extend({
                 done(null, canvas);
             }, 1);
         }.bind(this));
-
         return canvas;
     },
 
     // -----------------------------------------------------------------------
+
+    _sortData : function(data) {
+        if (typeof this.options.sortData === 'function') {
+            this._sortData = this.options.sortData;
+        } else {
+            this._sortData = function(data) {
+                return data;
+            }
+        }
+        return this._sortData(data);
+    },
 
     _getDataProvider : function() {
         return this.options.provider;
