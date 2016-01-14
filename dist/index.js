@@ -181,6 +181,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    tilePoint: tilePoint,
 	                    map: this._map
 	                };
+	                data = this._sortData(data, drawOptions);
 	                if (typeof data.forEach === 'function') {
 	                    data.forEach(function (d, i) {
 	                        renderer.drawFeature(d, style, drawOptions);
@@ -200,6 +201,17 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    // -----------------------------------------------------------------------
+
+	    _sortData: function _sortData(data) {
+	        if (typeof this.options.sortData === 'function') {
+	            this._sortData = this.options.sortData;
+	        } else {
+	            this._sortData = function (data) {
+	                return data;
+	            };
+	        }
+	        return this._sortData(data);
+	    },
 
 	    _getDataProvider: function _getDataProvider() {
 	        return this.options.provider;
@@ -247,7 +259,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    child = child.nextSibling;
 	                }
 	                for (var i = 0; i < toRemove.length; i++) {
-	                    // console.log('toRemove:', toRemove[i]);
 	                    L.DomUtil.remove(toRemove[i]);
 	                }
 	            }
@@ -1400,16 +1411,25 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    /**
-	     * Sorts the given data array by Manhattan distance to the origin point
+	     * Sorts the given data array
 	     */
 	    _sortByDistance: function _sortByDistance(array, bbox) {
-	        var p = bbox[0];
-	        array.sort(function (a, b) {
-	            var d1 = Math.abs(a[0] - p[0]) + Math.abs(a[1] - p[1]);
-	            var d2 = Math.abs(b[0] - p[0]) + Math.abs(b[1] - p[1]);
-	            return d1 - d2;
-	        });
-	        return array;
+	        if (typeof this.options.sort === 'function') {
+	            this._sortByDistance = this.options.sort;
+	        } else {
+	            this._sortByDistance = function (array, bbox) {
+	                var p = bbox[0];
+	                array.sort(function (a, b) {
+	                    var d = a[1] - p[1] - (b[1] - p[1]);
+	                    if (d === 0) {
+	                        d = a[0] - p[0] - (b[0] - p[0]);
+	                    }
+	                    return d;
+	                });
+	                return array;
+	            };
+	        }
+	        return this._sortByDistance(array, bbox);
 	    },
 
 	    /**
