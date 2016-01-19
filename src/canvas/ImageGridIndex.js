@@ -1,5 +1,5 @@
 var GridIndex = require('../data/GridIndex');
-var extend = require('./extend');
+var extend = require('../data/extend');
 
 function ImageGridIndex() {
     GridIndex.apply(this, arguments);

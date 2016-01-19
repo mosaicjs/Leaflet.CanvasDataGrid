@@ -1,4 +1,6 @@
-var GeometryUtils = require('./GeometryUtils');
+var extend = require('../data/extend');
+var GeometryUtils = require('../data/GeometryUtils');
+var IGridIndex = require('../data/IGridIndex');
 
 /**
  * This class provides a set of utility methods simplifying data visualization
@@ -7,7 +9,7 @@ var GeometryUtils = require('./GeometryUtils');
 function CanvasContext() {
     this.initialize.apply(this, arguments);
 }
-CanvasContext.prototype = {
+extend(CanvasContext.prototype, IGridIndex.prototype, {
 
     /** Initializes this object. */
     initialize : function(options) {
@@ -136,7 +138,7 @@ CanvasContext.prototype = {
             this._trace(g, coords[i]);
             g.stroke();
         }
-        g.closePath();
+        // g.closePath();
         return true;
     },
 
@@ -159,9 +161,11 @@ CanvasContext.prototype = {
 
     /** Simplifies the given line. */
     _simplify : function(coords) {
+        return [].concat(coords);
         var tolerance = this.options.tolerance || 0.8;
         var enableHighQuality = !!this.options.highQuality;
-        var points = GeometryUtils.simplify(coords, tolerance, enableHighQuality);
+        var points = GeometryUtils.simplify(coords, tolerance,
+                enableHighQuality);
         console
                 .log(' simplify: ', coords, coords.length, points,
                         points.length);
@@ -228,6 +232,8 @@ CanvasContext.prototype = {
         f.call(this, this._context);
     },
 
-};
+// --------------------------------------------------------------------
+
+});
 
 module.exports = CanvasContext;

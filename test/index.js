@@ -3,4 +3,4 @@ require("babel-core/register")({
     // an array of strings to be explicitly matched or a regex / glob
     ignore : false
 });
-// require('./XxxTest');
+require('./GeometryUtilsTest');

@@ -1,4 +1,4 @@
-var extend = require('./extend');
+var extend = require('../data/extend');
 var CanvasContext = require('./CanvasContext');
 var ImageGridIndex = require('./ImageGridIndex');
 

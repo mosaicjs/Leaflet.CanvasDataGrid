@@ -1,5 +1,5 @@
-var extend = require('./extend');
-var GeometryUtils = require('./GeometryUtils');
+var extend = require('../data/extend');
+var GeometryUtils = require('../data/GeometryUtils');
 
 /**
  * A common interface visualizing data on canvas.
@@ -37,7 +37,7 @@ extend(GeometryRenderer.prototype, {
         drawGeometry(geometry);
         return;
 
-        function drawMarker(point, index) {
+        function _drawMarker(point, index) {
             var markerStyle = styles.getMarkerStyle(resource, extend({},
                     options, {
                         index : index,
@@ -56,13 +56,13 @@ extend(GeometryRenderer.prototype, {
                 data : resource
             }, markerStyle));
         }
+
         function drawMarkers(points) {
-            points = that._getBboxPoints(points);
+            points = that._prepareMarkerCoordinates(points);
             if (points.length) {
-                points = that._getProjectedPoints(points);
                 for (var i = 0; i < points.length; i++) {
                     var point = points[i];
-                    drawMarker(point, i);
+                    _drawMarker(point, i);
                 }
             }
         }
@@ -73,14 +73,13 @@ extend(GeometryRenderer.prototype, {
                 index : index,
                 data : resource
             }));
-            if (lineStyle) {
-                points = that._getBboxClippedLines(points);
-                points = that._getProjectedPoints(points);
-                that.context.drawLine(points, extend({
-                    data : resource
-                }, lineStyle));
-            }
-            // drawMarker([ 0, 0 ]);
+            if (!lineStyle)
+                return;
+            points = that._prepareLineCoordinates(points);
+            that.context.drawLine(points, extend({
+                data : resource
+            }, lineStyle));
+            // _drawMarker([ 0, 0 ]);
         }
         //
         function drawPolygon(coords, index) {
@@ -90,25 +89,20 @@ extend(GeometryRenderer.prototype, {
                         index : index,
                         data : resource
                     }));
-            if (polygonStyle) {
-                var clipped = that._getBboxPolygon(coords[0]);
-                var polygons = that._getProjectedPoints(clipped);
-                var holes = [];
-                for (var i = 1; i < coords.length; i++) {
-                    // TODO: clip the hole by bounding box
-                    var clippedHole = that._getBboxPolygon(coords[i]);
-                    if (clippedHole.length) {
-                        var hole = that._getProjectedPoints(clippedHole);
-                        if (hole.length) {
-                            holes.push(hole);
-                        }
-                    }
+            if (!polygonStyle)
+                return;
+            var polygon = that._preparePolygonCoordinates(coords[0]);
+            var holes = [];
+            for (var i = 1; i < coords.length; i++) {
+                var hole = that._preparePolygonCoordinates(coords[i]);
+                if (hole.length) {
+                    holes.push(hole);
                 }
-                that.context.drawPolygon([ polygons ], holes, extend({
-                    data : resource
-                }, polygonStyle));
             }
-            // drawMarker([ 0, 0 ]);
+            that.context.drawPolygon([ polygon ], holes, extend({
+                data : resource
+            }, polygonStyle));
+            // _drawMarker([ 0, 0 ]);
         }
 
         function drawGeometry(geometry) {
@@ -149,26 +143,34 @@ extend(GeometryRenderer.prototype, {
 
     // ------------------------------------------------------------------
 
-    _getBboxPoints : function(coords) {
-        if (this.options.bbox) {
-            // coords = GeometryUtils.clipPoints(coords, this.options.bbox);
+    _prepareLineCoordinates : function(coords) {
+        coords = this._simplify(coords);
+        var clipPolygon = this._getClipPolygon();
+        if (clipPolygon.length) {
+            coords = GeometryUtils.clipLine(coords, clipPolygon);
         }
+        coords = this._getProjectedPoints(coords);
         return coords;
     },
 
-    _getBboxClippedLines : function(coords) {
+    _prepareMarkerCoordinates : function(coords) {
         var clipPolygon = this._getClipPolygon();
         if (clipPolygon.length) {
-            // coords = GeometryUtils.clipLines(coords, clipPolygon);
+            var bbox = [ clipPolygon[0], clipPolygon[2] ];
+            coords = GeometryUtils.clipPoints(coords, bbox);
         }
+        coords = this._getProjectedPoints(coords);
         return coords;
     },
 
-    _getBboxPolygon : function(coords) {
+    _preparePolygonCoordinates : function(coords) {
+        coords = this._simplify(coords);
         var clipPolygon = this._getClipPolygon();
         if (clipPolygon.length) {
-            //            coords = GeometryUtils.clipPolygon(coords, clipPolygon);
+            var newCoords = GeometryUtils.clipPolygon(coords, clipPolygon);
+            coords = newCoords;
         }
+        coords = this._getProjectedPoints(coords);
         return coords;
     },
 
@@ -177,10 +179,24 @@ extend(GeometryRenderer.prototype, {
             var clip;
             if (this.options.bbox) {
                 clip = GeometryUtils.getClippingPolygon(this.options.bbox);
+                // clip = clip.reverse();
             }
             this._clipPolygon = clip || [];
         }
         return this._clipPolygon;
+    },
+
+    /** Simplifies the given line. */
+    _simplify : function(coords) {
+        return [].concat(coords);
+        var tolerance = 0.8; // this.options.tolerance || 0.8;
+        var enableHighQuality = !!this.options.highQuality;
+        var points = GeometryUtils.simplify(coords, tolerance,
+                enableHighQuality);
+        console
+                .log(' simplify: ', coords, coords.length, points,
+                        points.length);
+        return points;
     },
 
     // ------------------------------------------------------------------
@@ -245,10 +261,6 @@ extend(GeometryRenderer.prototype, {
     getOrigin : function() {
         return this.options.origin || [ 0, 0 ];
     },
-
-    getTileSize : function() {
-        return this.options.tileSize || 256;
-    }
 
 });
 

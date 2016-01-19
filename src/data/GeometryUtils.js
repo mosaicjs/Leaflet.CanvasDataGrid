@@ -5,7 +5,14 @@ module.exports = {
         var ymin = Math.min(bbox[0][1], bbox[1][1]);
         var xmax = Math.max(bbox[0][0], bbox[1][0]);
         var ymax = Math.max(bbox[0][1], bbox[1][1]);
-        return [ [ xmin, ymin ], [ xmax, ymin ], [ xmax, ymax ], [ xmin, ymax ] ];
+        return [ [ xmin, ymin ], [ xmin, ymax ], [ xmax, ymax ],
+                [ xmax, ymin ], [ xmin, ymin ] ];
+        return [ [ xmin, ymin ], [ xmax, ymin ], [ xmax, ymax ],
+                [ xmin, ymax ], [ xmin, ymin ] ];
+
+        return [ [ bbox[0][0], bbox[0][1] ], [ bbox[0][0], bbox[1][1] ],
+                [ bbox[1][0], bbox[1][1] ], [ bbox[1][0], bbox[0][1] ],
+                [ bbox[0][0], bbox[0][1] ] ];
     },
 
     clipPoints : function(points, bounds) {
@@ -15,8 +22,8 @@ module.exports = {
         var result = [];
         for (var i = 0; i < points.length; i++) {
             var point = points[i];
-            if (inRange(point[0], bounds[0], bounds[2])
-                    && inRange(point[1], bounds[1], bounds[3])) {
+            if (inRange(point[0], bounds[0][0], bounds[1][0])
+                    && inRange(point[1], bounds[0][1], bounds[1][1])) {
                 result.push(point);
             }
         }
@@ -103,23 +110,36 @@ module.exports = {
         };
     })(),
 
+    clipPolygon : function(subjectPolygon, clipPolygon, round) {
+        var subj = [].concat(subjectPolygon);
+        subj.pop();
+        var clip = [].concat(clipPolygon);
+        clip.pop();
+        var result = this._clipPolygon(subj, clip, round);
+        return result;
+    },
+
     // Sutherland Hodgman polygon clipping algorithm
     // http://rosettacode.org/wiki/Sutherland-Hodgman_polygon_clipping
-    clipPolygon : function(subjectPolygon, clipPolygon) {
+    _clipPolygon : function(subjectPolygon, clipPolygon, r) {
+        r = r || Math.round;
         var cp1, cp2, s, e;
         var inside = function(p) {
             return (cp2[0] - cp1[0]) * //
             (p[1] - cp1[1]) > (cp2[1] - cp1[1]) * //
             (p[0] - cp1[0]);
         };
+        var round = function(point) {
+            return [ r(point[0]), r(point[1]) ];
+        }
         var intersection = function() {
             var dc = [ cp1[0] - cp2[0], cp1[1] - cp2[1] ];
             var dp = [ s[0] - e[0], s[1] - e[1] ];
             var n1 = cp1[0] * cp2[1] - cp1[1] * cp2[0];
             var n2 = s[0] * e[1] - s[1] * e[0];
             var n3 = 1.0 / (dc[0] * dp[1] - dc[1] * dp[0]);
-            return [ Math.round((n1 * dp[0] - n2 * dc[0]) * n3),
-                    Math.round((n1 * dp[1] - n2 * dc[1]) * n3) ];
+            return [ ((n1 * dp[0] - n2 * dc[0]) * n3),
+                    ((n1 * dp[1] - n2 * dc[1]) * n3) ];
         };
         var outputList = subjectPolygon;
         cp1 = clipPolygon[clipPolygon.length - 1];
@@ -127,18 +147,16 @@ module.exports = {
             cp2 = clipPolygon[j];
             var inputList = outputList;
             outputList = [];
-            s = inputList[inputList.length - 1]; // last on
-            // the input
-            // list
+            s = inputList[inputList.length - 1]; // last on the input list
             for ( var i in inputList) {
                 e = inputList[i];
                 if (inside(e)) {
                     if (!inside(s)) {
-                        outputList.push(intersection());
+                        outputList.push(round(intersection()));
                     }
-                    outputList.push(e);
+                    outputList.push(round(e));
                 } else if (inside(s)) {
-                    outputList.push(intersection());
+                    outputList.push(round(intersection()));
                 }
                 s = e;
             }

@@ -1,5 +1,5 @@
 var L = require('leaflet');
-// var CanvasContext = require('../canvas/CanvasContext');
+var CanvasContext = require('../canvas/CanvasContext');
 var CanvasIndexingContext = require('../canvas/CanvasIndexingContext');
 var GeometryRenderer = require('../canvas/GeometryRenderer');
 
@@ -34,89 +34,91 @@ var DataLayer = ParentLayer.extend({
     createTile : function(tilePoint, done) {
         var tileSize = this.getTileSize();
         var canvas = this._newCanvas(tileSize.x, tileSize.y);
+        canvas._redrawing = L.Util.requestAnimFrame(function() {
 
-        var bounds = this._tileCoordsToBounds(tilePoint);
-        var bbox = [ bounds.getWest(), bounds.getSouth(), bounds.getEast(),
-                bounds.getNorth() ];
-        var origin = [ bbox[0], bbox[3] ];
-        var pad = this._getTilePad(tilePoint);
-        var deltaLeft = Math.abs(bbox[0] - bbox[2]) * pad[0];
-        var deltaBottom = Math.abs(bbox[1] - bbox[3]) * pad[1];
-        var deltaRight = Math.abs(bbox[0] - bbox[2]) * pad[2];
-        var deltaTop = Math.abs(bbox[1] - bbox[3]) * pad[3];
-        bbox = [ bbox[0] - deltaLeft, bbox[1] - deltaBottom,
-                bbox[2] + deltaRight, bbox[3] + deltaTop ];
+            var bounds = this._tileCoordsToBounds(tilePoint);
+            var bbox = [ bounds.getWest(), bounds.getSouth(), bounds.getEast(),
+                    bounds.getNorth() ];
+            var origin = [ bbox[0], bbox[3] ];
+            var pad = this._getTilePad(tilePoint);
+            var deltaLeft = Math.abs(bbox[0] - bbox[2]) * pad[0];
+            var deltaBottom = Math.abs(bbox[1] - bbox[3]) * pad[1];
+            var deltaRight = Math.abs(bbox[0] - bbox[2]) * pad[2];
+            var deltaTop = Math.abs(bbox[1] - bbox[3]) * pad[3];
+            bbox = [ bbox[0] - deltaLeft, bbox[1] - deltaBottom,
+                    bbox[2] + deltaRight, bbox[3] + deltaTop ];
 
-        var size = Math.min(tileSize.x, tileSize.y);
-        var scale = GeometryRenderer.calculateScale(tilePoint.z, size);
+            var size = Math.min(tileSize.x, tileSize.y);
+            var scale = GeometryRenderer.calculateScale(tilePoint.z, size);
 
-        var resolution = this.options.resolution || 4;
-        var ContextType = CanvasIndexingContext;
-        // var ContextType = CanvasContext;
-        var context = new ContextType({
-            canvas : canvas,
-            newCanvas : this._newCanvas,
-            resolution : resolution,
-            imageMaskIndex : this._getImageMaskIndex
-        });
-        var map = this._map;
-        var provider = this._getDataProvider();
-        var renderer = new GeometryRenderer({
-            context : context,
-            tileSize : tileSize,
-            scale : scale,
-            origin : origin,
-            bbox : [ [ bbox[0], bbox[1] ], [ bbox[2], bbox[3] ] ],
-            getGeometry : provider.getGeometry.bind(provider),
-            project : function(coordinates) {
-                function project(point) {
-                    var p = map.project(L.latLng(point[1], point[0]),
-                            tilePoint.z);
-                    return [ p.x, p.y ];
+            var resolution = this.options.resolution || 4;
+            var ContextType = CanvasIndexingContext;
+//            var ContextType = CanvasContext;
+            var context = new ContextType({
+                canvas : canvas,
+                newCanvas : this._newCanvas,
+                resolution : resolution,
+                imageMaskIndex : this._getImageMaskIndex
+            });
+            var map = this._map;
+            var provider = this._getDataProvider();
+            var renderer = new GeometryRenderer({
+                context : context,
+                tileSize : tileSize,
+                scale : scale,
+                origin : origin,
+                bbox : [ [ bbox[0], bbox[1] ], [ bbox[2], bbox[3] ] ],
+                getGeometry : provider.getGeometry.bind(provider),
+                project : function(coordinates) {
+                    function project(point) {
+                        var p = map.project(L.latLng(point[1], point[0]),
+                                tilePoint.z);
+                        return [ p.x, p.y ];
+                    }
+                    var origin = renderer.getOrigin();
+                    var o = project(origin);
+                    return coordinates.map(function(point) {
+                        var r = project(point);
+                        var delta = [ Math.round(r[0] - o[0]),
+                                Math.round(r[1] - o[1]) ];
+                        return delta;
+                    });
                 }
-                var origin = renderer.getOrigin();
-                var o = project(origin);
-                return coordinates.map(function(point) {
-                    var r = project(point);
-                    var delta = [ Math.round(r[0] - o[0]),
-                            Math.round(r[1] - o[1]) ];
-                    return delta;
-                });
-            }
-        });
+            });
 
-        canvas.context = context;
-        canvas.renderer = renderer;
+            canvas.context = context;
+            canvas.renderer = renderer;
 
-        var style = this._getStyleProvider();
-        provider.loadData({
-            bbox : bbox,
-            tilePoint : tilePoint
-        }, function(err, data) {
-            if (err) {
-                return done(err);
-            }
-            if (data) {
-                var drawOptions = {
-                    tilePoint : tilePoint,
-                    map : this._map
-                };
-                data = this._sortData(data, drawOptions);
-                if (typeof data.forEach === 'function') {
-                    data.forEach(function(d, i) {
-                        renderer.drawFeature(d, style, drawOptions);
-                    })
-                } else if (data.length) {
-                    for (var i = 0; i < data.length; i++) {
-                        renderer.drawFeature(data[i], style, drawOptions);
+            var style = this._getStyleProvider();
+            provider.loadData({
+                bbox : bbox,
+                tilePoint : tilePoint
+            }, function(err, data) {
+                if (err) {
+                    return done(err);
+                }
+                if (data) {
+                    var drawOptions = {
+                        tilePoint : tilePoint,
+                        map : this._map
+                    };
+                    data = this._sortData(data, drawOptions);
+                    if (typeof data.forEach === 'function') {
+                        data.forEach(function(d, i) {
+                            renderer.drawFeature(d, style, drawOptions);
+                        })
+                    } else if (data.length) {
+                        for (var i = 0; i < data.length; i++) {
+                            renderer.drawFeature(data[i], style, drawOptions);
+                        }
                     }
                 }
-            }
-            setTimeout(function() {
-                done(null, canvas);
-            }, 1);
-        }.bind(this));
+            }.bind(this));
+        }, this);
 
+        setTimeout(function() {
+            done(null, canvas);
+        }, 0);
         return canvas;
     },
 
@@ -223,6 +225,8 @@ var DataLayer = ParentLayer.extend({
         if (!slot)
             return;
         var tile = slot.el;
+        if (!tile.context)
+            return;
         var x = p.x % tileSize.x;
         var y = p.y % tileSize.y;
         var data = tile.context.getAllData(x, y);

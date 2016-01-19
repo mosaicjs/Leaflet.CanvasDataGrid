@@ -84,6 +84,9 @@ GridIndex.prototype = {
             array = this._dataIndex[key] = [];
         }
         array.unshift(data);
+        // if (array.length > 1) {
+        // array.pop();
+        // }
     },
 
     _getIndexKey : function(maskX, maskY) {
