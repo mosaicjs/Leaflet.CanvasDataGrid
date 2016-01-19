@@ -7,6 +7,7 @@ extend(GeometryRenderStyle.prototype, {
 
     initialize : function(options) {
         this.options = options || {};
+        extend(this, this.options);
     },
     
     /**

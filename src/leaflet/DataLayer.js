@@ -94,31 +94,33 @@ var DataLayer = ParentLayer.extend({
                 bbox : bbox,
                 tilePoint : tilePoint
             }, function(err, data) {
-                if (err) {
-                    return done(err);
-                }
-                if (data) {
-                    var drawOptions = {
-                        tilePoint : tilePoint,
-                        map : this._map
-                    };
-                    data = this._sortData(data, drawOptions);
-                    if (typeof data.forEach === 'function') {
-                        data.forEach(function(d, i) {
-                            renderer.drawFeature(d, style, drawOptions);
-                        })
-                    } else if (data.length) {
-                        for (var i = 0; i < data.length; i++) {
-                            renderer.drawFeature(data[i], style, drawOptions);
+                var canvas;
+                try {
+                    if (!err && data) {
+                        var drawOptions = {
+                                tilePoint : tilePoint,
+                                map : this._map
+                        };
+                        data = this._sortData(data, drawOptions);
+                        if (typeof data.forEach === 'function') {
+                            data.forEach(function(d, i) {
+                                renderer.drawFeature(d, style, drawOptions);
+                            })
+                        } else if (data.length) {
+                            for (var i = 0; i < data.length; i++) {
+                                renderer.drawFeature(data[i], style, drawOptions);
+                            }
                         }
                     }
+                } catch (e) {
+                    err = e;
                 }
+                setTimeout(function() {
+                    done(err, canvas);
+                }, 10);
             }.bind(this));
         }, this);
 
-        setTimeout(function() {
-            done(null, canvas);
-        }, 0);
         return canvas;
     },
 

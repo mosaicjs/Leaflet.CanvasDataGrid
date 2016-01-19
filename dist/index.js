@@ -1505,7 +1505,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var tolerance = 0.8; // this.options.tolerance || 0.8;
 	        var enableHighQuality = !!this.options.highQuality;
 	        var points = GeometryUtils.simplify(coords, tolerance, enableHighQuality);
-	        console.log(' simplify: ', coords, coords.length, points, points.length);
 	        return points;
 	    },
 

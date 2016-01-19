@@ -193,9 +193,6 @@ extend(GeometryRenderer.prototype, {
         var enableHighQuality = !!this.options.highQuality;
         var points = GeometryUtils.simplify(coords, tolerance,
                 enableHighQuality);
-        console
-                .log(' simplify: ', coords, coords.length, points,
-                        points.length);
         return points;
     },
 
