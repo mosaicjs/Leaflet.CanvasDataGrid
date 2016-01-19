@@ -1,41 +1,42 @@
-- name of the plugin
-- a simple, concise description of what it does
-- requirements
-    - Leaflet version
-    - other external dependencies (if any)
-    - browser / device compatibility
-- links to demos
-- instructions for including the plugin
-- simple usage code example
-- API reference (methods, options, events)
+# Leaflet.CanvasDataGrid
 
-## Data Layer
+CanvasDataGrid is a Leaflet plugin allowing to create one or several layers which render data on canvas tiles. It maintains an internal index on the data rendered by each canvas tile, based on [RBush](https://github.com/mourner/rbush).
 
-This Leaflet plugin allows to visualize data on maps using HTML Canvas tiles.
-It is available under the MIT license.
+## Demo
 
-### Requirements
+## Requirements
+  * Leaflet v1.0.0-beta2
+  * Development libraries needed (under Ubuntu): cairo, libpango1.0-dev, libjpeg-dev, libgif-dev
 
-* Leaflet v1.0.0-beta2
-* Librairies needed on a Debian-based operating system: cairo, libpango1.0-dev, libjpeg-dev, libgif-dev
-
-### Demo
-
-### Installation
+## Installation
 
 > npm install
 
-### Examples
+## Examples
 
-### API references
+## API
 
-* CanvasTools - a set of methods used to draw images, lines and polygons on canvas
-  TODO: replace "clipLine", "clipLines", "clipPolygon" by "turf.intersect"
-  TODO: replace "simplify" method by "turf.simplify"
-    * CanvasContext - a generic class allowing to associate data with images
-      and geometries drawn on canvas.
-      TODO: data indexing code should be externalized to a GridIndex class
-* DataLayer - a Leaflet layer visualizing data on canvas tiles.
-  - use IDataProvider instances to load data associated with individual tiles
-  - use DataRenderer to visualize loaded objects
-* DataRenderer - visualize individual GeoJSON features on the canvas
+### DataLayer
+
+DataLayer is a Leaflet layer that renders data on canvas tiles.
+- Instances of `IDataProvider` are used to load data associated with individual tiles.
+- `DataRenderer` is used to render the loaded objects.
+
+### DataRenderer
+
+`DataRenderer` renders individual GeoJSON features on a canvas.
+
+### CanvasTools
+
+`CanvasTools` consists of a set of methods used to draw images, lines and polygons on canvas.
+- TODO: replace "clipLine", "clipLines", "clipPolygon" by "turf.intersect"
+- TODO: replace "simplify" method by "turf.simplify"
+
+### CanvasContext
+
+`CanvasContext` is a generic class allowing to associate data with images and geometries drawn on canvas.
+
+TODO: data indexing code should be externalized to a GridIndex class
+
+## License
+  Leaflet.CanvasDataGrid is licensed under the [MIT License](https://opensource.org/licenses/MIT).
