@@ -9,13 +9,49 @@ var IGridIndex = require('../data/IGridIndex');
 function CanvasContext() {
     this.initialize.apply(this, arguments);
 }
+function getFields(obj) {
+    var funcs = []
+    for ( var name in obj) {
+        if (typeof obj[name] === 'function') {
+            funcs.push(name)
+        }
+    }
+    return funcs;
+}
 extend(CanvasContext.prototype, IGridIndex.prototype, {
 
     /** Initializes this object. */
     initialize : function(options) {
         this.options = options || {};
         this._canvas = this.options.canvas;
-        this._context = this._canvas.getContext('2d');
+        this._context = this._newCanvasContext(this._canvas);
+        // console.log('fields:', getFields(this._context));
+    },
+
+    _newCanvasContext : function(canvas) {
+        var obj = {};
+        var fields = {};
+        var g = canvas.getContext('2d');
+        for ( var name in g) {
+            (function(name) {
+                if (typeof g[name] === 'function') {
+                    obj[name] = function() {
+                        return g[name].apply(g, arguments);
+                    };
+                } else {
+                    fields[name] = {
+                        get : function() {
+                            return g[name];
+                        },
+                        set : function(v) {
+                            g[name] = v;
+                        }
+                    }
+                }
+            })(name);
+        }
+        Object.defineProperties(obj, fields);
+        return obj;
     },
 
     // -----------------------------------------------------------------------
@@ -40,9 +76,28 @@ extend(CanvasContext.prototype, IGridIndex.prototype, {
      */
     drawImage : function(image, position, options) {
         this._drawOnCanvasContext(options, function(g) {
+            g.globalCompositeOperation = 'source-over';
+            // var mask = this._getImageData(image);
             g.drawImage(image, position[0], position[1]);
             return true;
         });
+    },
+
+    _getImageData : function(image) {
+        if (!image._data) {
+            var g;
+            if (image.tagName === 'CANVAS') {
+                g = image.getContext('2d');
+            } else {
+                var canvas = document.createElement('canvas');
+                canvas.width = image.width;
+                canvas.height = image.height;
+                g = canvas.getContext('2d');
+                g.drawImage(image, 0, 0, canvas.width, canvas.heigth);
+            }
+            image._data = g.getImageData(0, 0, image.width, image.height);
+        }
+        return image._data;
     },
 
     // -----------------------------------------------------------------------
@@ -59,6 +114,7 @@ extend(CanvasContext.prototype, IGridIndex.prototype, {
             // Simplify point sequence
             points = this._simplify(points);
             // Trace the line
+            g.globalCompositeOperation = 'source-over';
             return this._drawLines(g, points, strokeStyles);
         });
     },
@@ -112,6 +168,7 @@ extend(CanvasContext.prototype, IGridIndex.prototype, {
                 }
             }
 
+            g.globalCompositeOperation = 'source-over';
             // Draw lines around the polygon holes
             for (i = 0; i < holes.length; i++) {
                 this._drawLines(g, holes[i], strokeStyles);
@@ -166,9 +223,6 @@ extend(CanvasContext.prototype, IGridIndex.prototype, {
         var enableHighQuality = !!this.options.highQuality;
         var points = GeometryUtils.simplify(coords, tolerance,
                 enableHighQuality);
-        console
-                .log(' simplify: ', coords, coords.length, points,
-                        points.length);
         return points;
     },
 
@@ -229,6 +283,23 @@ extend(CanvasContext.prototype, IGridIndex.prototype, {
     // -----------------------------------------------------------------------
 
     _drawOnCanvasContext : function(options, f) {
+        // var width = this._canvas.width;
+        // var height = this._canvas.height;
+        // var data = this._context.getImageData(0, 0, width, height);
+        // for (var row = 0; row < height; row++) {
+        // for (var col = 0; col < width; col++) {
+        // var idx = ((row * width) + col) * 4;
+        // var red = data[idx + 0];
+        // var green = data[idx + 1];
+        // var blue = data[idx + 2];
+        // var alfa = data[idx + 3];
+        // data[idx + 3] = 255;
+        // data[idx + 2] = red;
+        // data[idx + 0] = blue;
+        // }
+        // }
+
+        // console.log(' _drawOnCanvasContext', this.options);
         f.call(this, this._context);
     },
 

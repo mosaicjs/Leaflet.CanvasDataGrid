@@ -32,9 +32,9 @@ extend(GeometryRenderer.prototype, {
     drawFeature : function(resource, styles, options) {
         var that = this;
         var geometry = this._getGeometry(resource, options);
-        if (!geometry)
-            return;
-        drawGeometry(geometry);
+        if (geometry) {
+            drawGeometry(geometry);
+        }
         return;
 
         function _drawMarker(point, index) {
