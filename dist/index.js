@@ -189,8 +189,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	        });
 
-	        canvas.context = context;
-	        canvas.renderer = renderer;
+	        tile.context = context;
+	        tile.renderer = renderer;
 
 	        var style = this._getStyleProvider();
 	        provider.loadData({
