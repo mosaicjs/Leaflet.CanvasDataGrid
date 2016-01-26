@@ -140,13 +140,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	        tile.appendChild(canvas);
 
 	        var tileId = this._tileId = (this._tileId || 0) + 1;
-	        // console.log(tileId + ') START... ');
 	        // canvas._redrawing = L.Util.requestAnimFrame(function() {
 
 	        var bounds = this._tileCoordsToBounds(tilePoint);
 	        var bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
 	        var origin = [bbox[0], bbox[3]];
 	        var pad = this._getTilePad(tilePoint);
+
 	        var deltaLeft = Math.abs(bbox[0] - bbox[2]) * pad[0];
 	        var deltaBottom = Math.abs(bbox[1] - bbox[3]) * pad[1];
 	        var deltaRight = Math.abs(bbox[0] - bbox[2]) * pad[2];
@@ -157,7 +157,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var scale = GeometryRenderer.calculateScale(tilePoint.z, size);
 
 	        var resolution = this.options.resolution || 4;
-	        //        var ContextType = CanvasContext;
+	        // var ContextType = CanvasContext;
 	        var ContextType = CanvasIndexingContext;
 	        var context = new ContextType({
 	            canvas: canvas,
@@ -197,14 +197,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	            bbox: extendedBbox,
 	            tilePoint: tilePoint
 	        }, (function (err, data) {
-	            // console.log(tileId + ') DATA LOADED', data.length);
 	            if (!err && data && data.length) {
 	                var drawOptions = {
 	                    tilePoint: tilePoint,
 	                    map: this._map
 	                };
-	                var start = new Date().getTime();
-	                data = this._sortData(data, drawOptions);
 	                if (typeof data.forEach === 'function') {
 	                    data.forEach(function (d, i) {
 	                        renderer.drawFeature(d, style, drawOptions);
@@ -214,30 +211,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	                        renderer.drawFeature(data[i], style, drawOptions);
 	                    }
 	                }
-	                var stop = new Date().getTime();
-	                //                console.log(tileId + ') SORT+DRAWING: ', (stop - start),
-	                //                        'ms for ', data.length, 'entries');
 	            }
 	        }).bind(this));
-	    },
-
-	    _redrawTile1: function _redrawTile1(tile, tilePoint) {
-	        var tileSize = this.getTileSize();
-	        tile.style.border = '1px solid gray';
-	        tile.innerHTML = tilePoint.x + ':' + tilePoint.y + ':' + tilePoint.z;
-
-	        var canvas = this._newCanvas(tileSize.x, tileSize.y);
-	        tile.appendChild(canvas);
-	        canvas.style.position = 'absolute';
-	        canvas.style.top = 0;
-	        canvas.style.left = 0;
-
-	        var ctx = canvas.getContext('2d');
-	        ctx.globalAlpha = 0.3;
-	        ctx.fillStyle = 'red';
-	        ctx.arc(tileSize.x / 2, tileSize.y / 2, tileSize.x / 2, //
-	        0, 2 * Math.PI);
-	        ctx.fill();
 	    },
 
 	    createTile: function createTile(tilePoint) {
@@ -250,17 +225,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    // -----------------------------------------------------------------------
-
-	    _sortData: function _sortData(data) {
-	        if (typeof this.options.sortData === 'function') {
-	            this._sortData = this.options.sortData;
-	        } else {
-	            this._sortData = function (data) {
-	                return data;
-	            };
-	        }
-	        return this._sortData(data);
-	    },
 
 	    _getDataProvider: function _getDataProvider() {
 	        return this.options.provider;
@@ -311,7 +275,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    delete this._levels[z];
 	                }
 	            }
-	        }).bind(this), 1);
+	        }).bind(this), 200);
 	    },
 
 	    _getTilePad: function _getTilePad(tilePoint) {
@@ -331,8 +295,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            } else {
 	                pad = [tilePad / tileSize.y, tilePad / tileSize.x, tilePad / tileSize.y, tilePad / tileSize.x];
 	            }
-	        }
-	        if (!pad) {
+	        } else {
 	            pad = [0.2, 0.2, 0.2, 0.2];
 	        }
 	        return pad;
