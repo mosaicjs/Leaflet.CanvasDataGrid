@@ -58,16 +58,17 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	var L = __webpack_require__(1);
 	L.DataLayer = __webpack_require__(2);
+	L.DataLayer.DataLayerStyle = __webpack_require__(11);
 	L.DataLayer.CanvasContext = __webpack_require__(3);
 	L.DataLayer.CanvasIndexingContext = __webpack_require__(7);
 	L.DataLayer.GeometryRenderer = __webpack_require__(10);
-	L.DataLayer.GeometryRendererStyle = __webpack_require__(11);
+	L.DataLayer.GeometryRendererStyle = __webpack_require__(12);
 	L.DataLayer.ImageGridIndex = __webpack_require__(8);
-	L.DataLayer.ImageUtils = __webpack_require__(12);
-	L.DataLayer.DataProvider = __webpack_require__(13);
-	L.DataLayer.forEachCoordinate = __webpack_require__(15);
+	L.DataLayer.ImageUtils = __webpack_require__(13);
+	L.DataLayer.DataProvider = __webpack_require__(14);
+	L.DataLayer.forEachCoordinate = __webpack_require__(16);
 	L.DataLayer.GridIndex = __webpack_require__(9);
-	L.DataLayer.IDataProvider = __webpack_require__(16);
+	L.DataLayer.IDataProvider = __webpack_require__(17);
 	module.exports = L.DataLayer;
 
 /***/ },
@@ -115,6 +116,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        ParentLayer.prototype.onRemove.apply(this, arguments);
 	    },
 
+	    bindPopup: function bindPopup(popup) {
+	        this._popup = popup;
+	    },
+
 	    _scheduleTileRedraw: function _scheduleTileRedraw(tile, tilePoint) {
 	        return this._redrawTile(tile, tilePoint);
 
@@ -155,11 +160,12 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	        var size = Math.min(tileSize.x, tileSize.y);
 	        var scale = GeometryRenderer.calculateScale(tilePoint.z, size);
+	        var style = this._getStyleProvider();
 
 	        var resolution = this.options.resolution || 4;
-	        // var ContextType = CanvasContext;
-	        var ContextType = CanvasIndexingContext;
-	        var context = new ContextType({
+	        var interaction = typeof style.enableInteraction === 'function' && style.enableInteraction(tilePoint.z);
+	        var Type = interaction ? CanvasIndexingContext : CanvasContext;
+	        var context = new Type({
 	            canvas: canvas,
 	            newCanvas: this._newCanvas,
 	            resolution: resolution,
@@ -192,7 +198,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	        tile.context = context;
 	        tile.renderer = renderer;
 
-	        var style = this._getStyleProvider();
 	        provider.loadData({
 	            bbox: extendedBbox,
 	            tilePoint: tilePoint
@@ -323,6 +328,17 @@ return /******/ (function(modules) { // webpackBootstrap
 	            ev.array = data;
 	            ev.data = data[0];
 	            this.fire('click', ev);
+	            if (this._popup && data[0]) {
+	                var latlng = ev.latlng;
+	                var provider = this._getDataProvider();
+	                var geometry = provider.getGeometry(data[0]);
+	                if (geometry.type === 'Point') {
+	                    latlng = L.latLng(geometry.coordinates[1], geometry.coordinates[0]);
+	                    // TODO: get the popup shift from the style
+	                }
+	                this._popup.setLatLng(latlng);
+	                this._popup.openOn(this._map);
+	            }
 	        }
 	    },
 
@@ -395,9 +411,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    _newCanvasContext: function _newCanvasContext(canvas) {
+	        var g = canvas.getContext('2d');
+	        return g;
+
 	        var obj = {};
 	        var fields = {};
-	        var g = canvas.getContext('2d');
 	        for (var name in g) {
 	            (function (name) {
 	                if (typeof g[name] === 'function') {
@@ -1675,6 +1693,25 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	'use strict';
 
+	var GeometryRendererStyle = __webpack_require__(12);
+	var extend = __webpack_require__(4);
+
+	function DataLayerStyle(options) {
+	    this.initialize(options);
+	}
+	extend(DataLayerStyle.prototype, GeometryRendererStyle.prototype, {
+	    enableInteraction: function enableInteraction(zoom) {
+	        return zoom > 9;
+	    }
+	});
+	module.exports = DataLayerStyle;
+
+/***/ },
+/* 12 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
 	var extend = __webpack_require__(4);
 
 	function GeometryRenderStyle(options) {
@@ -1731,7 +1768,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = GeometryRenderStyle;
 
 /***/ },
-/* 12 */
+/* 13 */
 /***/ function(module, exports) {
 
 	"use strict";
@@ -1771,13 +1808,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 
 /***/ },
-/* 13 */
+/* 14 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var rbush = __webpack_require__(14);
-	var forEachCoordinate = __webpack_require__(15);
+	var rbush = __webpack_require__(15);
+	var forEachCoordinate = __webpack_require__(16);
 
 	/**
 	 * A simple data provider synchronously indexing the given data using an RTree
@@ -1909,7 +1946,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = DataProvider;
 
 /***/ },
-/* 14 */
+/* 15 */
 /***/ function(module, exports, __webpack_require__) {
 
 	var __WEBPACK_AMD_DEFINE_RESULT__;/*
@@ -2536,7 +2573,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 15 */
+/* 16 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -2559,7 +2596,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 
 /***/ },
-/* 16 */
+/* 17 */
 /***/ function(module, exports) {
 
 	/**

@@ -29,9 +29,11 @@ extend(CanvasContext.prototype, IGridIndex.prototype, {
     },
 
     _newCanvasContext : function(canvas) {
+        var g = canvas.getContext('2d');
+        return g;
+        
         var obj = {};
         var fields = {};
-        var g = canvas.getContext('2d');
         for ( var name in g) {
             (function(name) {
                 if (typeof g[name] === 'function') {
