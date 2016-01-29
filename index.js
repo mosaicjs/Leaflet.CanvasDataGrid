@@ -1,5 +1,6 @@
 var L = require('leaflet');
 L.DataLayer = require('./src/leaflet/DataLayer');
+L.DataLayer.DataLayerStyle = require('./src/leaflet/DataLayerStyle');
 L.DataLayer.CanvasContext = require('./src/canvas/CanvasContext');
 L.DataLayer.CanvasIndexingContext = require('./src/canvas/CanvasIndexingContext');
 L.DataLayer.GeometryRenderer = require('./src/canvas/GeometryRenderer');

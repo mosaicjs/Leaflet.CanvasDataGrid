@@ -31,6 +31,10 @@ var DataLayer = ParentLayer.extend({
         ParentLayer.prototype.onRemove.apply(this, arguments);
     },
 
+    bindPopup : function(popup){
+        this._popup = popup;
+    },
+    
     _scheduleTileRedraw : function(tile, tilePoint) {
         return this._redrawTile(tile, tilePoint);
 
@@ -64,7 +68,7 @@ var DataLayer = ParentLayer.extend({
                 bounds.getNorth() ];
         var origin = [ bbox[0], bbox[3] ];
         var pad = this._getTilePad(tilePoint);
-
+        
         var deltaLeft = Math.abs(bbox[0] - bbox[2]) * pad[0];
         var deltaBottom = Math.abs(bbox[1] - bbox[3]) * pad[1];
         var deltaRight = Math.abs(bbox[0] - bbox[2]) * pad[2];
@@ -74,11 +78,13 @@ var DataLayer = ParentLayer.extend({
 
         var size = Math.min(tileSize.x, tileSize.y);
         var scale = GeometryRenderer.calculateScale(tilePoint.z, size);
+        var style = this._getStyleProvider();
 
         var resolution = this.options.resolution || 4;
-        // var ContextType = CanvasContext;
-        var ContextType = CanvasIndexingContext;
-        var context = new ContextType({
+        var interaction = typeof style.enableInteraction === 'function' && 
+            style.enableInteraction(tilePoint.z);
+        var Type = interaction ? CanvasIndexingContext : CanvasContext;
+        var context = new Type({
             canvas : canvas,
             newCanvas : this._newCanvas,
             resolution : resolution,
@@ -114,7 +120,6 @@ var DataLayer = ParentLayer.extend({
         tile.context = context;
         tile.renderer = renderer;
 
-        var style = this._getStyleProvider();
         provider.loadData({
             bbox : extendedBbox,
             tilePoint : tilePoint
@@ -250,6 +255,20 @@ var DataLayer = ParentLayer.extend({
             ev.array = data;
             ev.data = data[0];
             this.fire('click', ev);
+            if (this._popup && data[0]) {
+                var latlng = ev.latlng;
+                var provider = this._getDataProvider();
+                var geometry = provider.getGeometry(data[0]);
+                if (geometry.type === 'Point') {
+                    latlng = L.latLng(
+                        geometry.coordinates[1],
+                        geometry.coordinates[0]
+                    );
+                    // TODO: get the popup shift from the style
+                }
+                this._popup.setLatLng(latlng);
+                this._popup.openOn(this._map);
+            }
         }
     },
 
