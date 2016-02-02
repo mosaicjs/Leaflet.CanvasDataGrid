@@ -70,8 +70,6 @@ var DataLayer = ParentLayer.extend({
 
         var pad = this._getTilePad(tilePoint);
         var extendedBbox = this.expandBbox(bbox, pad);
-        // console.log('pad:', pad, 'bbox:', bbox, 'extendedBbox:',
-        // extendedBbox);
 
         var size = Math.min(tileSize.x, tileSize.y);
         var scale = GeometryRenderer.calculateScale(tilePoint.z, size);
@@ -157,8 +155,8 @@ var DataLayer = ParentLayer.extend({
     _addOffset : function(coords, offset) {
         var map = this._map;
         // Get the tile number
-        var containerPoint = map.latLngToContainerPoint(L.latLng(coords[1],
-                coords[0]));
+        var containerPoint = map.project(L.latLng(coords[1], coords[0]))
+                ._round();
         var tileSize = this.getTileSize();
         // Get the coordinates of the tile
         var tileCoords = containerPoint.unscaleBy(tileSize);
@@ -167,10 +165,10 @@ var DataLayer = ParentLayer.extend({
         // Translate shit in pixels to new coordinates
         var sw = tileBounds.getSouthWest();
         var ne = tileBounds.getNorthEast();
-        var lng = coords[0] + Math.abs(sw.lng - ne.lng)
-                * (offset[0] / tileSize.x);
-        var lat = coords[1] + Math.abs(sw.lat - ne.lat)
-                * (offset[1] / tileSize.y);
+        var latK = (offset[0] / tileSize.y);
+        var lngK = (offset[1] / tileSize.x);
+        var lng = coords[0] + Math.abs(sw.lng - ne.lng) * lngK;
+        var lat = coords[1] + Math.abs(sw.lat - ne.lat) * latK;
         return [ lng, lat ];
     },
 
@@ -182,13 +180,15 @@ var DataLayer = ParentLayer.extend({
         var top, right, bottom, left;
         if (Array.isArray(pad)) {
             var i = 0;
-            top = pad[i++];
-            right = pad[i++];
-            if (i >= pad.length) {
-                i = 0;
+            if (pad.length === 2) {
+                top = bottom = pad[i++];
+                right = left = pad[i++];
+            } else {
+                top = pad[i++];
+                right = pad[i++];
+                bottom = pad[i++];
+                left = pad[i++];
             }
-            bottom = pad[i++];
-            left = pad[i++];
         } else {
             top = right = bottom = left = pad;
         }
