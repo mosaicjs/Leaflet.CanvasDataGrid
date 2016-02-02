@@ -354,6 +354,7 @@ module.exports = {
      * at least one of the given polygons.
      */
     bboxIntersectsPolygons : function(polygons, bbox) {
+        var clip = this.getClippingPolygon(bbox);
         for (var i = 0; i < polygons.length; i++) {
             if (this.bboxIntersectsPolygon(polygons[i], bbox))
                 return true;
@@ -366,9 +367,48 @@ module.exports = {
      * with the given polygon.
      */
     bboxIntersectsPolygon : function(polygon, bbox) {
-        var polygon = this.getClippingPolygon(bbox);
-        var result = this.clipPolygon(polygon, polygon);
+        var clip = this.getClippingPolygon(bbox);
+        var result = this.clipPolygon(polygon, clip);
         return !!result.length;
+    },
+
+    /**
+     * Returns <code>true</code> if the specified bounding box is intersects
+     * with the given polygon.
+     */
+    bboxIntersectsPolygonsWithHoles : function(polygons, bbox) {
+        var clip = this.getClippingPolygon(bbox);
+        for (var i = 0; i < polygons.length; i++) {
+            if (this.bboxIntersectsPolygonWithHoles(polygons[i], bbox))
+                return true;
+        }
+        return false;
+    },
+
+    /**
+     * Returns <code>true</code> if the specified bounding box is intersects
+     * with the given polygon.
+     */
+    bboxIntersectsPolygonWithHoles : function(polygon, bbox) {
+        var clip = this.getClippingPolygon(bbox);
+        // FIXME: check that the clip box is not in the holes
+        var result = this.clipPolygon(polygon[0], clip);
+        return result && result.length;
+    },
+
+    /**
+     * Returns an interection of a list of polygons with the specified clip
+     * polygon
+     */
+    clipPolygons : function(polygons, clipPolygon) {
+        var result = [];
+        for (var i = 0; i < polygons.length; i++) {
+            var r = this.clipPolygon(polygons[i], clipPolygon);
+            if (r && r.length) {
+                result.push(r);
+            }
+        }
+        return result;
     },
 
     /**
@@ -378,16 +418,14 @@ module.exports = {
      * same).
      */
     clipPolygon : function(subjectPolygon, clipPolygon) {
-        var subj = [].concat(subjectPolygon);
+        var subj = subjectPolygon;
         if (!this.isClockwise(subj)) {
-            subj.reverse();
+            subj = [].concat(subj).reverse();
         }
-
-        var clip = [].concat(clipPolygon);
+        var clip = clipPolygon;
         if (this.isClockwise(clip)) {
-            clip.reverse();
+            clip = [].concat(clip).reverse();
         }
-
         var result = this._clipPolygon(subj, clip);
         return result;
     },
@@ -440,5 +478,6 @@ module.exports = {
         }
         return outputList || [];
     },
+
 
 };

@@ -93,8 +93,8 @@ DataProvider.prototype = {
                 },
                 onPolygons : function(polygons) {
                     if (!handled
-                            && GeometryUtils.bboxIntersectsPolygons(polygons,
-                                    bbox)) {
+                            && GeometryUtils.bboxIntersectsPolygonsWithHoles(
+                                    polygons, bbox)) {
                         result.push(r);
                         handled = true;
                     }
@@ -130,7 +130,7 @@ DataProvider.prototype = {
      * This method transforms a bounding box into a key for RTree index.
      */
     _toIndexKey : function(bbox) {
-        return [+bbox[0][0], +bbox[0][1], +bbox[1][0], +bbox[1][1]];
+        return [ +bbox[0][0], +bbox[0][1], +bbox[1][0], +bbox[1][1] ];
     },
 
     /**
