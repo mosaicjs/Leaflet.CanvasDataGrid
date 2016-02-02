@@ -153,8 +153,6 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	        var pad = this._getTilePad(tilePoint);
 	        var extendedBbox = this.expandBbox(bbox, pad);
-	        // console.log('pad:', pad, 'bbox:', bbox, 'extendedBbox:',
-	        // extendedBbox);
 
 	        var size = Math.min(tileSize.x, tileSize.y);
 	        var scale = GeometryRenderer.calculateScale(tilePoint.z, size);
@@ -237,7 +235,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    _addOffset: function _addOffset(coords, offset) {
 	        var map = this._map;
 	        // Get the tile number
-	        var containerPoint = map.latLngToContainerPoint(L.latLng(coords[1], coords[0]));
+	        var containerPoint = map.project(L.latLng(coords[1], coords[0]))._round();
 	        var tileSize = this.getTileSize();
 	        // Get the coordinates of the tile
 	        var tileCoords = containerPoint.unscaleBy(tileSize);
@@ -246,8 +244,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        // Translate shit in pixels to new coordinates
 	        var sw = tileBounds.getSouthWest();
 	        var ne = tileBounds.getNorthEast();
-	        var lng = coords[0] + Math.abs(sw.lng - ne.lng) * (offset[0] / tileSize.x);
-	        var lat = coords[1] + Math.abs(sw.lat - ne.lat) * (offset[1] / tileSize.y);
+	        var latK = offset[0] / tileSize.y;
+	        var lngK = offset[1] / tileSize.x;
+	        var lng = coords[0] + Math.abs(sw.lng - ne.lng) * lngK;
+	        var lat = coords[1] + Math.abs(sw.lat - ne.lat) * latK;
 	        return [lng, lat];
 	    },
 
@@ -259,13 +259,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var top, right, bottom, left;
 	        if (Array.isArray(pad)) {
 	            var i = 0;
-	            top = pad[i++];
-	            right = pad[i++];
-	            if (i >= pad.length) {
-	                i = 0;
+	            if (pad.length === 2) {
+	                top = bottom = pad[i++];
+	                right = left = pad[i++];
+	            } else {
+	                top = pad[i++];
+	                right = pad[i++];
+	                bottom = pad[i++];
+	                left = pad[i++];
 	            }
-	            bottom = pad[i++];
-	            left = pad[i++];
 	        } else {
 	            top = right = bottom = left = pad;
 	        }
@@ -383,6 +385,12 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	    loadDataAround: function loadDataAround(latlng, radiusInPixels, callback) {
 	        var bbox = this.pixelsToBbox(latlng, radiusInPixels);
+
+	        if (this._rect) {
+	            this._map.removeLayer(this._rect);
+	        }
+	        this._rect = L.rectangle([[bbox[0][1], bbox[0][0]], [bbox[1][1], bbox[1][0]]], {}).addTo(this._map);
+
 	        return this.loadData(bbox, function (err, list) {
 	            if (err) {
 	                return callback(err);
@@ -1019,6 +1027,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * at least one of the given polygons.
 	     */
 	    bboxIntersectsPolygons: function bboxIntersectsPolygons(polygons, bbox) {
+	        var clip = this.getClippingPolygon(bbox);
 	        for (var i = 0; i < polygons.length; i++) {
 	            if (this.bboxIntersectsPolygon(polygons[i], bbox)) return true;
 	        }
@@ -1030,9 +1039,47 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * with the given polygon.
 	     */
 	    bboxIntersectsPolygon: function bboxIntersectsPolygon(polygon, bbox) {
-	        var polygon = this.getClippingPolygon(bbox);
-	        var result = this.clipPolygon(polygon, polygon);
+	        var clip = this.getClippingPolygon(bbox);
+	        var result = this.clipPolygon(polygon, clip);
 	        return !!result.length;
+	    },
+
+	    /**
+	     * Returns <code>true</code> if the specified bounding box is intersects
+	     * with the given polygon.
+	     */
+	    bboxIntersectsPolygonsWithHoles: function bboxIntersectsPolygonsWithHoles(polygons, bbox) {
+	        var clip = this.getClippingPolygon(bbox);
+	        for (var i = 0; i < polygons.length; i++) {
+	            if (this.bboxIntersectsPolygonWithHoles(polygons[i], bbox)) return true;
+	        }
+	        return false;
+	    },
+
+	    /**
+	     * Returns <code>true</code> if the specified bounding box is intersects
+	     * with the given polygon.
+	     */
+	    bboxIntersectsPolygonWithHoles: function bboxIntersectsPolygonWithHoles(polygon, bbox) {
+	        var clip = this.getClippingPolygon(bbox);
+	        // FIXME: check that the clip box is not in the holes
+	        var result = this.clipPolygon(polygon[0], clip);
+	        return result && result.length;
+	    },
+
+	    /**
+	     * Returns an interection of a list of polygons with the specified clip
+	     * polygon
+	     */
+	    clipPolygons: function clipPolygons(polygons, clipPolygon) {
+	        var result = [];
+	        for (var i = 0; i < polygons.length; i++) {
+	            var r = this.clipPolygon(polygons[i], clipPolygon);
+	            if (r && r.length) {
+	                result.push(r);
+	            }
+	        }
+	        return result;
 	    },
 
 	    /**
@@ -1042,16 +1089,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * same).
 	     */
 	    clipPolygon: function clipPolygon(subjectPolygon, _clipPolygon) {
-	        var subj = [].concat(subjectPolygon);
+	        var subj = subjectPolygon;
 	        if (!this.isClockwise(subj)) {
-	            subj.reverse();
+	            subj = [].concat(subj).reverse();
 	        }
-
-	        var clip = [].concat(_clipPolygon);
+	        var clip = _clipPolygon;
 	        if (this.isClockwise(clip)) {
-	            clip.reverse();
+	            clip = [].concat(clip).reverse();
 	        }
-
 	        var result = this._clipPolygon(subj, clip);
 	        return result;
 	    },
@@ -1923,7 +1968,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    }
 	                },
 	                onPolygons: function onPolygons(polygons) {
-	                    if (!handled && GeometryUtils.bboxIntersectsPolygons(polygons, bbox)) {
+	                    if (!handled && GeometryUtils.bboxIntersectsPolygonsWithHoles(polygons, bbox)) {
 	                        result.push(r);
 	                        handled = true;
 	                    }
