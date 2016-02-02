@@ -385,12 +385,6 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	    loadDataAround: function loadDataAround(latlng, radiusInPixels, callback) {
 	        var bbox = this.pixelsToBbox(latlng, radiusInPixels);
-
-	        if (this._rect) {
-	            this._map.removeLayer(this._rect);
-	        }
-	        this._rect = L.rectangle([[bbox[0][1], bbox[0][0]], [bbox[1][1], bbox[1][0]]], {}).addTo(this._map);
-
 	        return this.loadData(bbox, function (err, list) {
 	            if (err) {
 	                return callback(err);
