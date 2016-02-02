@@ -1,5 +1,6 @@
 var rbush = require('rbush');
-var forEachCoordinate = require('./forEachCoordinate');
+var GeoJsonUtils = require('./GeoJsonUtils');
+var GeometryUtils = require('./GeometryUtils');
 
 /**
  * A simple data provider synchronously indexing the given data using an RTree
@@ -26,6 +27,9 @@ DataProvider.prototype = {
 
     /**
      * Loads and returns indexed data contained in the specified bounding box.
+     * 
+     * @param options.bbox
+     *            a bounding box used to search data
      */
     loadData : function(options, callback) {
         var that = this;
@@ -43,9 +47,9 @@ DataProvider.prototype = {
         function index(d) {
             var bbox = that._getBoundingBox(d);
             if (bbox) {
-                var coords = that._toIndexKey(bbox);
-                coords.data = d;
-                array.push(coords);
+                var key = that._toIndexKey(bbox);
+                key.data = d;
+                array.push(key);
             }
         }
         if (typeof data === 'function') {
@@ -69,7 +73,33 @@ DataProvider.prototype = {
         var result = [];
         for (var i = 0; i < array.length; i++) {
             var arr = array[i];
-            result.push(arr.data);
+            var r = arr.data;
+            var geometry = this.getGeometry(r);
+            var handled = false;
+            GeoJsonUtils.forEachGeometry(geometry, {
+                onPoints : function(points) {
+                    if (!handled
+                            && GeometryUtils.bboxContainsPoints(points, bbox)) {
+                        result.push(r);
+                        handled = true;
+                    }
+                },
+                onLines : function(lines) {
+                    if (!handled
+                            && GeometryUtils.bboxIntersectsLines(lines, bbox)) {
+                        result.push(r);
+                        handled = true;
+                    }
+                },
+                onPolygons : function(polygons) {
+                    if (!handled
+                            && GeometryUtils.bboxIntersectsPolygons(polygons,
+                                    bbox)) {
+                        result.push(r);
+                        handled = true;
+                    }
+                }
+            });
         }
         return result;
     },
@@ -100,10 +130,7 @@ DataProvider.prototype = {
      * This method transforms a bounding box into a key for RTree index.
      */
     _toIndexKey : function(bbox) {
-        bbox = bbox.map(function(v) {
-            return +v;
-        });
-        return bbox;
+        return [+bbox[0][0], +bbox[0][1], +bbox[1][0], +bbox[1][1]];
     },
 
     /**
@@ -112,18 +139,7 @@ DataProvider.prototype = {
      */
     _getBoundingBox : function(r) {
         var geometry = this.getGeometry(r);
-        var extent = [ Infinity, Infinity, -Infinity, -Infinity ];
-        forEachCoordinate(geometry, function(coord) {
-            if (extent[0] > coord[0])
-                extent[0] = coord[0];
-            if (extent[1] > coord[1])
-                extent[1] = coord[1];
-            if (extent[2] < coord[0])
-                extent[2] = coord[0];
-            if (extent[3] < coord[1])
-                extent[3] = coord[1];
-        });
-        return extent;
+        return GeoJsonUtils.getBoundingBox(geometry);
     },
 
     getGeometry : function(r) {

@@ -1,13 +1,17 @@
 var L = require('leaflet');
 var CanvasContext = require('../canvas/CanvasContext');
-var CanvasIndexingContext = require('../canvas/CanvasIndexingContext');
 var GeometryRenderer = require('../canvas/GeometryRenderer');
+var GeoJsonUtils = require('../data/GeoJsonUtils');
+var GeometryUtils = require('../data/GeometryUtils');
 
 /**
  * This layer draws data on canvas tiles.
  */
 var ParentLayer = L.GridLayer;
 var DataLayer = ParentLayer.extend({
+    options : {
+        pane : 'overlayPane',
+    },
 
     initialize : function(options) {
         ParentLayer.prototype.initialize.apply(this, arguments);
@@ -31,13 +35,11 @@ var DataLayer = ParentLayer.extend({
         ParentLayer.prototype.onRemove.apply(this, arguments);
     },
 
-    bindPopup : function(popup){
+    bindPopup : function(popup) {
         this._popup = popup;
     },
-    
-    _scheduleTileRedraw : function(tile, tilePoint) {
-        return this._redrawTile(tile, tilePoint);
 
+    _scheduleTileRedraw : function(tile, tilePoint) {
         var list = this._redrawQueue = this._redrawQueue || [];
         if (this._redrawTimeoutId === undefined) {
             this._redrawTimeoutId = setTimeout(function() {
@@ -63,28 +65,20 @@ var DataLayer = ParentLayer.extend({
         var tileId = this._tileId = (this._tileId || 0) + 1;
         // canvas._redrawing = L.Util.requestAnimFrame(function() {
 
-        var bounds = this._tileCoordsToBounds(tilePoint);
-        var bbox = [ bounds.getWest(), bounds.getSouth(), bounds.getEast(),
-                bounds.getNorth() ];
-        var origin = [ bbox[0], bbox[3] ];
+        var bbox = this._getTileBbox(tilePoint);
+        var origin = [ bbox[0][0], bbox[1][1] ];
+
         var pad = this._getTilePad(tilePoint);
-        
-        var deltaLeft = Math.abs(bbox[0] - bbox[2]) * pad[0];
-        var deltaBottom = Math.abs(bbox[1] - bbox[3]) * pad[1];
-        var deltaRight = Math.abs(bbox[0] - bbox[2]) * pad[2];
-        var deltaTop = Math.abs(bbox[1] - bbox[3]) * pad[3];
-        var extendedBbox = [ bbox[0] - deltaLeft, bbox[1] - deltaBottom,
-                bbox[2] + deltaRight, bbox[3] + deltaTop ];
+        var extendedBbox = this.expandBbox(bbox, pad);
+        // console.log('pad:', pad, 'bbox:', bbox, 'extendedBbox:',
+        // extendedBbox);
 
         var size = Math.min(tileSize.x, tileSize.y);
         var scale = GeometryRenderer.calculateScale(tilePoint.z, size);
         var style = this._getStyleProvider();
 
         var resolution = this.options.resolution || 4;
-        var interaction = typeof style.enableInteraction === 'function' && 
-            style.enableInteraction(tilePoint.z);
-        var Type = interaction ? CanvasIndexingContext : CanvasContext;
-        var context = new Type({
+        var context = new CanvasContext({
             canvas : canvas,
             newCanvas : this._newCanvas,
             resolution : resolution,
@@ -97,8 +91,7 @@ var DataLayer = ParentLayer.extend({
             tileSize : tileSize,
             scale : scale,
             origin : origin,
-            bbox : [ [ extendedBbox[0], extendedBbox[1] ],
-                    [ extendedBbox[2], extendedBbox[3] ] ],
+            bbox : extendedBbox,
             getGeometry : provider.getGeometry.bind(provider),
             project : function(coordinates) {
                 function project(point) {
@@ -120,10 +113,7 @@ var DataLayer = ParentLayer.extend({
         tile.context = context;
         tile.renderer = renderer;
 
-        provider.loadData({
-            bbox : extendedBbox,
-            tilePoint : tilePoint
-        }, function(err, data) {
+        this.loadData(extendedBbox, function(err, data) {
             if (!err && data && data.length) {
                 var drawOptions = {
                     tilePoint : tilePoint,
@@ -149,6 +139,83 @@ var DataLayer = ParentLayer.extend({
         tile.style.height = tileSize.y;
         this._scheduleTileRedraw(tile, tilePoint);
         return tile;
+    },
+
+    // -----------------------------------------------------------------------
+
+    _getTileBbox : function(tilePoint) {
+        var bounds = this._tileCoordsToBounds(tilePoint);
+        var bbox = [ [ bounds.getWest(), bounds.getSouth() ],
+                [ bounds.getEast(), bounds.getNorth() ] ];
+        return bbox;
+    },
+
+    /**
+     * Adds the specified offset (in pixels) to the given coordinates and
+     * returns the resulting value.
+     */
+    _addOffset : function(coords, offset) {
+        var map = this._map;
+        // Get the tile number
+        var containerPoint = map.latLngToContainerPoint(L.latLng(coords[1],
+                coords[0]));
+        var tileSize = this.getTileSize();
+        // Get the coordinates of the tile
+        var tileCoords = containerPoint.unscaleBy(tileSize);
+        // Get geographical coordinates (bounds) of the tile
+        var tileBounds = this._tileCoordsToBounds(tileCoords);
+        // Translate shit in pixels to new coordinates
+        var sw = tileBounds.getSouthWest();
+        var ne = tileBounds.getNorthEast();
+        var lng = coords[0] + Math.abs(sw.lng - ne.lng)
+                * (offset[0] / tileSize.x);
+        var lat = coords[1] + Math.abs(sw.lat - ne.lat)
+                * (offset[1] / tileSize.y);
+        return [ lng, lat ];
+    },
+
+    /**
+     * Expands the given bounding box [[s, w], [n, e]] by adding the area
+     * covered by the specified pad in pixels [n, e, s, w].
+     */
+    expandBbox : function(bbox, pad) {
+        var top, right, bottom, left;
+        if (Array.isArray(pad)) {
+            var i = 0;
+            top = pad[i++];
+            right = pad[i++];
+            if (i >= pad.length) {
+                i = 0;
+            }
+            bottom = pad[i++];
+            left = pad[i++];
+        } else {
+            top = right = bottom = left = pad;
+        }
+        var sw = this._addOffset(bbox[0], [ -left, -bottom ]);
+        var ne = this._addOffset(bbox[1], [ right, top ]);
+        return [ sw, ne ];
+    },
+
+    pixelsToBbox : function(coords, padInPixels) {
+        var bbox;
+        if (!Array.isArray(coords)) {
+            bbox = [ [ coords.lng, coords.lat ], [ coords.lng, coords.lat ] ];
+        } else {
+            bbox = [ [ coords[0], coords[1] ], [ coords[0], coords[1] ] ];
+        }
+        return this.expandBbox(bbox, padInPixels);
+    },
+
+    /** Returns the pad (in pixels) around a tile */
+    _getTilePad : function(tilePoint) {
+        var tilePad = this.options.tilePad;
+        if (typeof tilePad === 'function') {
+            tilePad = this.options.tilePad({
+                tilePoint : tilePoint
+            });
+        }
+        return tilePad;
     },
 
     // -----------------------------------------------------------------------
@@ -205,33 +272,7 @@ var DataLayer = ParentLayer.extend({
         }.bind(this), 200);
     },
 
-    _getTilePad : function(tilePoint) {
-        // left, bottom, right, top
-        // west, south, east, north
-        var tilePad = this.options.tilePad;
-        if (typeof tilePad === 'function') {
-            tilePad = this.options.tilePad({
-                tilePoint : tilePoint
-            });
-        }
-        var pad;
-        if (tilePad) {
-            var tileSize = this.getTileSize();
-            if (Array.isArray(tilePad)) {
-                pad = [ tilePad[0] / tileSize.y, tilePad[1] / tileSize.x,
-                        tilePad[2] / tileSize.y, tilePad[3] / tileSize.x ];
-            } else {
-                pad = [ tilePad / tileSize.y, tilePad / tileSize.x,
-                        tilePad / tileSize.y, tilePad / tileSize.x ];
-            }
-        } else {
-            pad = [ 0.2, 0.2, 0.2, 0.2 ];
-        }
-        return pad;
-
-    },
-
-    _getDataByCoordinates : function(latlng) {
+    _isTransparent : function(latlng) {
         var p = this._map.project(latlng).floor();
         var tileSize = this.getTileSize();
         var coords = p.unscaleBy(tileSize).floor();
@@ -245,46 +286,70 @@ var DataLayer = ParentLayer.extend({
             return;
         var x = p.x % tileSize.x;
         var y = p.y % tileSize.y;
-        var data = tile.context.getAllData(x, y);
-        return data;
+        return tile.context.isTransparent(x, y);
     },
 
     _onClick : function(ev) {
-        var data = this._getDataByCoordinates(ev.latlng);
-        if (!!data) {
-            ev.array = data;
-            ev.data = data[0];
+        if (!this._isTransparent(ev.latlng)) {
+            ev.target = this;
+            ev.map = this._map;
             this.fire('click', ev);
-            if (this._popup && data[0]) {
-                var latlng = ev.latlng;
-                var provider = this._getDataProvider();
-                var geometry = provider.getGeometry(data[0]);
-                if (geometry.type === 'Point') {
-                    latlng = L.latLng(
-                        geometry.coordinates[1],
-                        geometry.coordinates[0]
-                    );
-                    // TODO: get the popup shift from the style
-                }
-                this._popup.setLatLng(latlng);
-                this._popup.openOn(this._map);
-            }
         }
+    },
+
+    // -----------------------------------------------------------------------
+
+    loadData : function(bbox, callback) {
+        var provider = this._getDataProvider();
+        return provider.loadData({
+            bbox : bbox
+        }, callback);
+    },
+
+    loadDataAround : function(latlng, radiusInPixels, callback) {
+        var bbox = this.pixelsToBbox(latlng, radiusInPixels);
+        return this.loadData(bbox, function(err, list) {
+            if (err) {
+                return callback(err);
+            } else {
+                // TODO: add data filtering; return only geometries
+                // intersecting with the bbox.
+                // list = filter(list);
+                return callback(null, list);
+            }
+        });
+    },
+
+    openPopup : function(latlng) {
+        if (this._popup) {
+            var provider = this._getDataProvider();
+
+            var geometry = provider.getGeometry(data[0]);
+            if (geometry.type === 'Point') {
+                latlng = L.latLng(geometry.coordinates[1],
+                        geometry.coordinates[0]);
+                // TODO: get the popup shift from the style
+            }
+            this._popup.setLatLng(latlng);
+            this._popup.openOn(this._map);
+        }
+
     },
 
     _onMouseMove : function(ev) {
-        var data = this._getDataByCoordinates(ev.latlng);
-        if (!!data) {
-            ev.array = data;
-            ev.data = data[0];
+        if (!this._isTransparent(ev.latlng)) {
+            ev.target = this;
+            ev.map = this._map;
+            // ev.array = data;
+            // ev.data = data[0];
             this.fire('mousemove', ev);
-            this._setMouseOverStyle(true);
+            this._setMouseOverStyle(true, ev);
         } else {
-            this._setMouseOverStyle(false);
+            this._setMouseOverStyle(false, ev);
         }
     },
 
-    _setMouseOverStyle : function(set) {
+    _setMouseOverStyle : function(set, ev) {
         set = !!set;
         if (!!this._mouseover !== set) {
             var delta = set ? 1 : -1;
@@ -293,8 +358,10 @@ var DataLayer = ParentLayer.extend({
             var el = this._map._container;
             if (!!this._map._mouseoverCounter) {
                 el.style.cursor = 'pointer';
+                this.fire('mouseenter', ev);
             } else {
                 el.style.cursor = 'auto';
+                this.fire('mouseleave', ev);
             }
         }
         this._mouseover = set;

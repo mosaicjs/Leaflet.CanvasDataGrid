@@ -77,16 +77,17 @@ GridIndex.prototype = {
      */
     _addDataToIndex : function(key, options) {
         var data = options.data;
-        if (!data)
+        if (data === undefined)
             return;
         var array = this._dataIndex[key];
         if (!array || options.replace) {
             array = this._dataIndex[key] = [];
         }
         array.unshift(data);
-        // if (array.length > 1) {
-        // array.pop();
-        // }
+        array.count = (array.count || 0) + 1;
+        while (array.length && array.length > (this.options.maxCellCapacity || 1)) {
+            array.pop();
+        }
     },
 
     _getIndexKey : function(maskX, maskY) {

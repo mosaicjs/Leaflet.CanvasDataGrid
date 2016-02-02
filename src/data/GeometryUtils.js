@@ -1,50 +1,108 @@
 module.exports = {
 
-    getClippingPolygon : function(bbox) {
-        var xmin = Math.min(bbox[0][0], bbox[1][0]);
-        var ymin = Math.min(bbox[0][1], bbox[1][1]);
-        var xmax = Math.max(bbox[0][0], bbox[1][0]);
-        var ymax = Math.max(bbox[0][1], bbox[1][1]);
-        return [ [ xmin, ymin ], [ xmin, ymax ], [ xmax, ymax ],
-                [ xmax, ymin ], [ xmin, ymin ] ];
-        return [ [ xmin, ymin ], [ xmax, ymin ], [ xmax, ymax ],
-                [ xmin, ymax ], [ xmin, ymin ] ];
+    // ------------------------------------------------------------------------
+    // Points
 
-        return [ [ bbox[0][0], bbox[0][1] ], [ bbox[0][0], bbox[1][1] ],
-                [ bbox[1][0], bbox[1][1] ], [ bbox[1][0], bbox[0][1] ],
-                [ bbox[0][0], bbox[0][1] ] ];
-    },
-
-    clipPoints : function(points, bounds) {
-        function inRange(val, a, b) {
-            return (val - a) * (val - b) <= 0;
-        }
+    /**
+     * Gets a list of points (as a sequence of [x,y] coordinates) and returns
+     * points in the specified bounding box.
+     */
+    clipPoints : function(points, bbox) {
         var result = [];
         for (var i = 0; i < points.length; i++) {
             var point = points[i];
-            if (inRange(point[0], bounds[0][0], bounds[1][0])
-                    && inRange(point[1], bounds[0][1], bounds[1][1])) {
+            if (this.bboxContainsPoint(point, bbox)) {
                 result.push(point);
             }
         }
         return result;
     },
 
-    clipLines : function(lines, bounds) {
+    /**
+     * Returns <code>true</code> a point is contained in the specified
+     * bounding box.
+     */
+    bboxContainsPoints : function(points, bbox) {
+        for (var i = 0; i < points.length; i++) {
+            if (this.bboxContainsPoint(points[i], bbox))
+                return true;
+        }
+        return false;
+    },
+
+    /**
+     * Returns <code>true</code> a point is contained in the specified
+     * bounding box.
+     */
+    bboxContainsPoint : function(point, bbox) {
+        return inRange(point[0], bbox[0][0], bbox[1][0])
+                && inRange(point[1], bbox[0][1], bbox[1][1]);
+        function inRange(val, a, b) {
+            return (val - a) * (val - b) <= 0;
+        }
+    },
+
+    // ------------------------------------------------------------------------
+    // Lines
+
+    /**
+     * Returns true if the specified poly-line (defined as a sequence of [x,y]
+     * coordinates of their segments) has intersections with the specified
+     * bounding box.
+     */
+    bboxIntersectsLines : function(lines, bbox) {
+        for (var i = 0; i < lines.length; i++) {
+            if (this.bboxIntersectsLine(lines[i], bbox))
+                return true;
+        }
+        return false;
+    },
+
+    /**
+     * Returns true if the specified poly-line (defined as a sequence of [x,y]
+     * coordinates of their segments) has intersections with the specified
+     * bounding box.
+     */
+    bboxIntersectsLine : function(line, bbox) {
+        var prev = line[0];
+        for (var i = 1; i < line.length; i++) {
+            var next = line[i];
+            var clipped = this.clipLine([ prev, next ], bbox);
+            if (clipped) {
+                return true;
+            }
+            prev = next;
+        }
+        return false;
+    },
+
+    /**
+     * Trims a multiline defined as a sequence of coordinates [x,y] by the
+     * specified bounding box and returns the clipped result.
+     */
+    clipLines : function(lines, bbox) {
         var result = [];
         var prev = lines[0];
         for (var i = 1; i < lines.length; i++) {
             var next = lines[i];
-            var clipped = this.clipLine([ prev, next ], bounds);
+            var clipped = this.clipLine([ prev, next ], bbox);
             if (clipped) {
-                result.push(clipped);
+                var last = result.length ? result[result.length - 1] : null;
+                if (!last || (last[0] !== clipped[0][0])
+                        || (last[1] !== clipped[0][1])) {
+                    result.push(clipped[0]);
+                }
+                result.push(clipped[1]);
             }
             prev = next;
         }
         return result;
     },
 
-    // Cohen-Sutherland line-clipping algorithm
+    /**
+     * Cohen-Sutherland line-clipping algorithm. It is used to clip one line
+     * segment.
+     */
     clipLine : (function() {
         function getCode(x, y, xmin, ymin, xmax, ymax) {
             var oc = 0;
@@ -110,67 +168,10 @@ module.exports = {
         };
     })(),
 
-    clipPolygon : function(subjectPolygon, clipPolygon, round) {
-        var subj = [].concat(subjectPolygon);
-        subj.pop();
-        var clip = [].concat(clipPolygon);
-        clip.pop();
-        var result = this._clipPolygon(subj, clip, round);
-        return result;
-    },
-
-    // Sutherland Hodgman polygon clipping algorithm
-    // http://rosettacode.org/wiki/Sutherland-Hodgman_polygon_clipping
-    _clipPolygon : function(subjectPolygon, clipPolygon, r) {
-        r = r || Math.round;
-        var cp1, cp2, s, e;
-        var inside = function(p) {
-            return (cp2[0] - cp1[0]) * //
-            (p[1] - cp1[1]) > (cp2[1] - cp1[1]) * //
-            (p[0] - cp1[0]);
-        };
-        var round = function(point) {
-            return [ r(point[0]), r(point[1]) ];
-        }
-        var intersection = function() {
-            var dc = [ cp1[0] - cp2[0], cp1[1] - cp2[1] ];
-            var dp = [ s[0] - e[0], s[1] - e[1] ];
-            var n1 = cp1[0] * cp2[1] - cp1[1] * cp2[0];
-            var n2 = s[0] * e[1] - s[1] * e[0];
-            var n3 = 1.0 / (dc[0] * dp[1] - dc[1] * dp[0]);
-            return [ ((n1 * dp[0] - n2 * dc[0]) * n3),
-                    ((n1 * dp[1] - n2 * dc[1]) * n3) ];
-        };
-        var outputList = subjectPolygon;
-        cp1 = clipPolygon[clipPolygon.length - 1];
-        for ( var j in clipPolygon) {
-            cp2 = clipPolygon[j];
-            var inputList = outputList;
-            outputList = [];
-            s = inputList[inputList.length - 1]; // last on the input list
-            for ( var i in inputList) {
-                e = inputList[i];
-                if (inside(e)) {
-                    if (!inside(s)) {
-                        outputList.push(round(intersection()));
-                    }
-                    outputList.push(round(e));
-                } else if (inside(s)) {
-                    outputList.push(round(intersection()));
-                }
-                s = e;
-            }
-            cp1 = cp2;
-        }
-        if (outputList && outputList.length) {
-            outputList.push(outputList[0]);
-        }
-        return outputList || [];
-    },
-
     /**
-     * This method simplifies the specified line by reducing the number of
-     * points but it keeps the total "form" of the line.
+     * This method simplifies the specified line (given as a sequence of
+     * [x,y] coordinates of their points) by reducing the number of points but
+     * it keeps the total "form" of the line.
      * 
      * @param line
      *            a sequence of points to simplify
@@ -311,5 +312,133 @@ module.exports = {
         }
 
         return simplify;
-    })()
+    })(),
+
+    // ------------------------------------------------------------------------
+    // Polygons
+
+    /**
+     * Transforms a bounding box to a closed clipping polygon with clockwise
+     * order of coordinates.
+     * 
+     * @param bbox
+     *            [[xmin,ymin],[xmax,ymax]]
+     * @return a clipping rectangle with the following coordinates:
+     *         [[xmin,ymin],[xmin,ymax],[xmax,ymax],[xmax,ymin],[xmin,ymin]]
+     */
+    getClippingPolygon : function(bbox) {
+        var xmin = Math.min(bbox[0][0], bbox[1][0]);
+        var ymin = Math.min(bbox[0][1], bbox[1][1]);
+        var xmax = Math.max(bbox[0][0], bbox[1][0]);
+        var ymax = Math.max(bbox[0][1], bbox[1][1]);
+        return [ [ xmin, ymin ], [ xmin, ymax ], [ xmax, ymax ],
+                [ xmax, ymin ], [ xmin, ymin ] ];
+    },
+
+    /**
+     * Returns <code>true</code> if the specified sequence of points are
+     * arranged in the clockwise order.
+     */
+    isClockwise : function(coords) {
+        var i, j, area = 0;
+        for (i = 0; i < coords.length; i++) {
+            j = (i + 1) % coords.length;
+            area += coords[i][0] * coords[j][1];
+            area -= coords[j][0] * coords[i][1];
+        }
+        return (area < 0);
+    },
+
+    /**
+     * Returns <code>true</code> if the specified bounding box is intersects
+     * at least one of the given polygons.
+     */
+    bboxIntersectsPolygons : function(polygons, bbox) {
+        for (var i = 0; i < polygons.length; i++) {
+            if (this.bboxIntersectsPolygon(polygons[i], bbox))
+                return true;
+        }
+        return false;
+    },
+
+    /**
+     * Returns <code>true</code> if the specified bounding box is intersects
+     * with the given polygon.
+     */
+    bboxIntersectsPolygon : function(polygon, bbox) {
+        var polygon = this.getClippingPolygon(bbox);
+        var result = this.clipPolygon(polygon, polygon);
+        return !!result.length;
+    },
+
+    /**
+     * Clips polygon by the specified bounding polygon (not a bounding box!).
+     * The subject and clipping polygons are closed "rings" or [x,y] coordinate
+     * arrays (the last and the first coordinates in each sequence should be the
+     * same).
+     */
+    clipPolygon : function(subjectPolygon, clipPolygon) {
+        var subj = [].concat(subjectPolygon);
+        if (!this.isClockwise(subj)) {
+            subj.reverse();
+        }
+
+        var clip = [].concat(clipPolygon);
+        if (this.isClockwise(clip)) {
+            clip.reverse();
+        }
+
+        var result = this._clipPolygon(subj, clip);
+        return result;
+    },
+
+    // Sutherland Hodgman polygon clipping algorithm
+    // http://rosettacode.org/wiki/Sutherland-Hodgman_polygon_clipping
+    _clipPolygon : function(subjectPolygon, clipPolygon) {
+        var cp1, cp2, s, e;
+        var inside = function(p) {
+            return (cp2[0] - cp1[0]) * //
+            (p[1] - cp1[1]) > (cp2[1] - cp1[1]) * //
+            (p[0] - cp1[0]);
+        };
+        var intersection = function() {
+            var dc = [ cp1[0] - cp2[0], cp1[1] - cp2[1] ];
+            var dp = [ s[0] - e[0], s[1] - e[1] ];
+            var n1 = cp1[0] * cp2[1] - cp1[1] * cp2[0];
+            var n2 = s[0] * e[1] - s[1] * e[0];
+            var n3 = 1.0 / (dc[0] * dp[1] - dc[1] * dp[0]);
+            return [ ((n1 * dp[0] - n2 * dc[0]) * n3),
+                    ((n1 * dp[1] - n2 * dc[1]) * n3) ];
+        };
+        var outputList = subjectPolygon;
+        var outputLen = subjectPolygon.length - 1;
+        var clipLen = clipPolygon.length - 1;
+        cp1 = clipPolygon[clipLen - 1];
+        for (var j = 0; j < clipLen; j++) {
+            cp2 = clipPolygon[j];
+            var inputList = outputList;
+            var inputLen = outputLen;
+            outputList = [];
+            s = inputList[inputLen - 1]; // last on the input list
+            for (var i = 0; i < inputLen; i++) {
+                e = inputList[i];
+                if (inside(e)) {
+                    if (!inside(s)) {
+                        outputList.push(intersection());
+                    }
+                    outputList.push(e);
+                } else if (inside(s)) {
+                    outputList.push(intersection());
+                }
+                s = e;
+            }
+            cp1 = cp2;
+            outputLen = outputList.length;
+        }
+        if (outputList && outputList.length && outputList !== subjectPolygon) {
+            outputList.push(outputList[0]);
+        }
+        return outputList || [];
+    },
+
 };
