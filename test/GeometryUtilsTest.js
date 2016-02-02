@@ -6,16 +6,27 @@ describe('GeometryUtils', function() {
     function getRound(precision) {
         var r = Math.pow(10, -precision) / 2;
         return function(f) {
+            f = +f;
             f += (f > 0) ? r : -r;
             return +f.toFixed(precision);
+        }
+    }
+    function getRoundCoords(precision) {
+        var round = getRound(precision);
+        return function(list) {
+            return list.map(function(point) {
+                return [ round(point[0]), round(point[1]) ];
+            });
         }
     }
 
     function testIntersection(first, second, result) {
         var n = 5;
-        var round = getRound(5);
+        var round = getRoundCoords(5);
         // round = Math.round;
         var test = GeometryUtils.clipPolygon(first, second, round);
+        test = round(test);
+        result = round(result);
         var a = JSON.stringify(test);
         var b = JSON.stringify(result);
         // console.log('>>', a);
@@ -37,8 +48,9 @@ describe('GeometryUtils', function() {
                 [ 33.3984375, 44.08758502824518 ],
                 [ 15.8203125, 58.44773280389084 ] ], //
 
-        [ [ -3.8672, 44.33957 ], [ 7.79447, 52.69638 ], [ 16.52346, 52.69638 ],
-                [ 16.52345, 44.20169 ], [ -3.8672, 44.33957 ] ]
+        [ [ -3.8671875, 44.339565 ], [ 7.794455, 52.696361 ],
+                [ 16.523437, 52.696361 ], [ 16.523437, 44.201689 ],
+                [ -3.8671875, 44.339565 ] ]
         // from postgres:
         // [ [ 7.79445581802627, 52.6963610782745 ],
         // [ 16.5234375, 52.6963610782745 ],
@@ -56,9 +68,9 @@ describe('GeometryUtils', function() {
                 [ -122.723464, 45.446643 ], [ -122.532577, 45.408574 ],
                 [ -122.487258, 45.477466 ], [ -122.520217, 45.535693 ] ],
 
-        [ [ -122.61361, 45.48569 ], [ -122.66993, 45.50731 ],
-                [ -122.63009, 45.55244 ], [ -122.58478, 45.54557 ],
-                [ -122.58478, 45.48569 ], [ -122.61361, 45.48569 ] ]
+        [ [ -122.613494, 45.485650 ], [ -122.669906, 45.507309 ],
+                [ -122.630095, 45.552403 ], [ -122.584762, 45.545509 ],
+                [ -122.584762, 45.485650 ], [ -122.613494, 45.485650 ] ]
         //
         // [ [ -122.584762, 45.545508794628965 ], [ -122.584762, 45.48565 ],
         // [ -122.68902729894835, 45.48565 ], [ -122.669906, 45.507309 ],

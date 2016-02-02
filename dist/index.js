@@ -58,17 +58,16 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	var L = __webpack_require__(1);
 	L.DataLayer = __webpack_require__(2);
-	L.DataLayer.DataLayerStyle = __webpack_require__(11);
+	L.DataLayer.DataLayerStyle = __webpack_require__(9);
 	L.DataLayer.CanvasContext = __webpack_require__(3);
-	L.DataLayer.CanvasIndexingContext = __webpack_require__(7);
-	L.DataLayer.GeometryRenderer = __webpack_require__(10);
-	L.DataLayer.GeometryRendererStyle = __webpack_require__(12);
-	L.DataLayer.ImageGridIndex = __webpack_require__(8);
+	L.DataLayer.GeometryRenderer = __webpack_require__(7);
+	L.DataLayer.GeometryRendererStyle = __webpack_require__(10);
+	L.DataLayer.ImageGridIndex = __webpack_require__(11);
 	L.DataLayer.ImageUtils = __webpack_require__(13);
 	L.DataLayer.DataProvider = __webpack_require__(14);
-	L.DataLayer.forEachCoordinate = __webpack_require__(16);
-	L.DataLayer.GridIndex = __webpack_require__(9);
-	L.DataLayer.IDataProvider = __webpack_require__(17);
+	L.DataLayer.GeoJsonUtils = __webpack_require__(8);
+	L.DataLayer.GridIndex = __webpack_require__(12);
+	L.DataLayer.IDataProvider = __webpack_require__(16);
 	module.exports = L.DataLayer;
 
 /***/ },
@@ -85,14 +84,18 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	var L = __webpack_require__(1);
 	var CanvasContext = __webpack_require__(3);
-	var CanvasIndexingContext = __webpack_require__(7);
-	var GeometryRenderer = __webpack_require__(10);
+	var GeometryRenderer = __webpack_require__(7);
+	var GeoJsonUtils = __webpack_require__(8);
+	var GeometryUtils = __webpack_require__(5);
 
 	/**
 	 * This layer draws data on canvas tiles.
 	 */
 	var ParentLayer = L.GridLayer;
 	var DataLayer = ParentLayer.extend({
+	    options: {
+	        pane: 'overlayPane'
+	    },
 
 	    initialize: function initialize(options) {
 	        ParentLayer.prototype.initialize.apply(this, arguments);
@@ -121,8 +124,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    _scheduleTileRedraw: function _scheduleTileRedraw(tile, tilePoint) {
-	        return this._redrawTile(tile, tilePoint);
-
 	        var list = this._redrawQueue = this._redrawQueue || [];
 	        if (this._redrawTimeoutId === undefined) {
 	            this._redrawTimeoutId = setTimeout((function () {
@@ -147,25 +148,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var tileId = this._tileId = (this._tileId || 0) + 1;
 	        // canvas._redrawing = L.Util.requestAnimFrame(function() {
 
-	        var bounds = this._tileCoordsToBounds(tilePoint);
-	        var bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
-	        var origin = [bbox[0], bbox[3]];
-	        var pad = this._getTilePad(tilePoint);
+	        var bbox = this._getTileBbox(tilePoint);
+	        var origin = [bbox[0][0], bbox[1][1]];
 
-	        var deltaLeft = Math.abs(bbox[0] - bbox[2]) * pad[0];
-	        var deltaBottom = Math.abs(bbox[1] - bbox[3]) * pad[1];
-	        var deltaRight = Math.abs(bbox[0] - bbox[2]) * pad[2];
-	        var deltaTop = Math.abs(bbox[1] - bbox[3]) * pad[3];
-	        var extendedBbox = [bbox[0] - deltaLeft, bbox[1] - deltaBottom, bbox[2] + deltaRight, bbox[3] + deltaTop];
+	        var pad = this._getTilePad(tilePoint);
+	        var extendedBbox = this.expandBbox(bbox, pad);
+	        // console.log('pad:', pad, 'bbox:', bbox, 'extendedBbox:',
+	        // extendedBbox);
 
 	        var size = Math.min(tileSize.x, tileSize.y);
 	        var scale = GeometryRenderer.calculateScale(tilePoint.z, size);
 	        var style = this._getStyleProvider();
 
 	        var resolution = this.options.resolution || 4;
-	        var interaction = typeof style.enableInteraction === 'function' && style.enableInteraction(tilePoint.z);
-	        var Type = interaction ? CanvasIndexingContext : CanvasContext;
-	        var context = new Type({
+	        var context = new CanvasContext({
 	            canvas: canvas,
 	            newCanvas: this._newCanvas,
 	            resolution: resolution,
@@ -178,7 +174,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            tileSize: tileSize,
 	            scale: scale,
 	            origin: origin,
-	            bbox: [[extendedBbox[0], extendedBbox[1]], [extendedBbox[2], extendedBbox[3]]],
+	            bbox: extendedBbox,
 	            getGeometry: provider.getGeometry.bind(provider),
 	            project: function project(coordinates) {
 	                function project(point) {
@@ -198,10 +194,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        tile.context = context;
 	        tile.renderer = renderer;
 
-	        provider.loadData({
-	            bbox: extendedBbox,
-	            tilePoint: tilePoint
-	        }, (function (err, data) {
+	        this.loadData(extendedBbox, (function (err, data) {
 	            if (!err && data && data.length) {
 	                var drawOptions = {
 	                    tilePoint: tilePoint,
@@ -227,6 +220,79 @@ return /******/ (function(modules) { // webpackBootstrap
 	        tile.style.height = tileSize.y;
 	        this._scheduleTileRedraw(tile, tilePoint);
 	        return tile;
+	    },
+
+	    // -----------------------------------------------------------------------
+
+	    _getTileBbox: function _getTileBbox(tilePoint) {
+	        var bounds = this._tileCoordsToBounds(tilePoint);
+	        var bbox = [[bounds.getWest(), bounds.getSouth()], [bounds.getEast(), bounds.getNorth()]];
+	        return bbox;
+	    },
+
+	    /**
+	     * Adds the specified offset (in pixels) to the given coordinates and
+	     * returns the resulting value.
+	     */
+	    _addOffset: function _addOffset(coords, offset) {
+	        var map = this._map;
+	        // Get the tile number
+	        var containerPoint = map.latLngToContainerPoint(L.latLng(coords[1], coords[0]));
+	        var tileSize = this.getTileSize();
+	        // Get the coordinates of the tile
+	        var tileCoords = containerPoint.unscaleBy(tileSize);
+	        // Get geographical coordinates (bounds) of the tile
+	        var tileBounds = this._tileCoordsToBounds(tileCoords);
+	        // Translate shit in pixels to new coordinates
+	        var sw = tileBounds.getSouthWest();
+	        var ne = tileBounds.getNorthEast();
+	        var lng = coords[0] + Math.abs(sw.lng - ne.lng) * (offset[0] / tileSize.x);
+	        var lat = coords[1] + Math.abs(sw.lat - ne.lat) * (offset[1] / tileSize.y);
+	        return [lng, lat];
+	    },
+
+	    /**
+	     * Expands the given bounding box [[s, w], [n, e]] by adding the area
+	     * covered by the specified pad in pixels [n, e, s, w].
+	     */
+	    expandBbox: function expandBbox(bbox, pad) {
+	        var top, right, bottom, left;
+	        if (Array.isArray(pad)) {
+	            var i = 0;
+	            top = pad[i++];
+	            right = pad[i++];
+	            if (i >= pad.length) {
+	                i = 0;
+	            }
+	            bottom = pad[i++];
+	            left = pad[i++];
+	        } else {
+	            top = right = bottom = left = pad;
+	        }
+	        var sw = this._addOffset(bbox[0], [-left, -bottom]);
+	        var ne = this._addOffset(bbox[1], [right, top]);
+	        return [sw, ne];
+	    },
+
+	    pixelsToBbox: function pixelsToBbox(coords, padInPixels) {
+	        var bbox;
+	        if (!Array.isArray(coords)) {
+	            bbox = [[coords.lng, coords.lat], [coords.lng, coords.lat]];
+	        } else {
+	            bbox = [[coords[0], coords[1]], [coords[0], coords[1]]];
+	        }
+	        return this.expandBbox(bbox, padInPixels);
+	    },
+
+	    /** Returns the pad (in pixels) around a tile */
+	    _getTilePad: function _getTilePad(tilePoint) {
+	        var tilePad = this.options.tilePad;
+	        if (typeof tilePad === 'function') {
+	            tilePad = this.options.tilePad({
+	                tilePoint: tilePoint
+	            });
+	        }
+	        return tilePad;
 	    },
 
 	    // -----------------------------------------------------------------------
@@ -283,30 +349,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }).bind(this), 200);
 	    },
 
-	    _getTilePad: function _getTilePad(tilePoint) {
-	        // left, bottom, right, top
-	        // west, south, east, north
-	        var tilePad = this.options.tilePad;
-	        if (typeof tilePad === 'function') {
-	            tilePad = this.options.tilePad({
-	                tilePoint: tilePoint
-	            });
-	        }
-	        var pad;
-	        if (tilePad) {
-	            var tileSize = this.getTileSize();
-	            if (Array.isArray(tilePad)) {
-	                pad = [tilePad[0] / tileSize.y, tilePad[1] / tileSize.x, tilePad[2] / tileSize.y, tilePad[3] / tileSize.x];
-	            } else {
-	                pad = [tilePad / tileSize.y, tilePad / tileSize.x, tilePad / tileSize.y, tilePad / tileSize.x];
-	            }
-	        } else {
-	            pad = [0.2, 0.2, 0.2, 0.2];
-	        }
-	        return pad;
-	    },
-
-	    _getDataByCoordinates: function _getDataByCoordinates(latlng) {
+	    _isTransparent: function _isTransparent(latlng) {
 	        var p = this._map.project(latlng).floor();
 	        var tileSize = this.getTileSize();
 	        var coords = p.unscaleBy(tileSize).floor();
@@ -318,43 +361,68 @@ return /******/ (function(modules) { // webpackBootstrap
 	        if (!tile.context) return;
 	        var x = p.x % tileSize.x;
 	        var y = p.y % tileSize.y;
-	        var data = tile.context.getAllData(x, y);
-	        return data;
+	        return tile.context.isTransparent(x, y);
 	    },
 
 	    _onClick: function _onClick(ev) {
-	        var data = this._getDataByCoordinates(ev.latlng);
-	        if (!!data) {
-	            ev.array = data;
-	            ev.data = data[0];
+	        if (!this._isTransparent(ev.latlng)) {
+	            ev.target = this;
+	            ev.map = this._map;
 	            this.fire('click', ev);
-	            if (this._popup && data[0]) {
-	                var latlng = ev.latlng;
-	                var provider = this._getDataProvider();
-	                var geometry = provider.getGeometry(data[0]);
-	                if (geometry.type === 'Point') {
-	                    latlng = L.latLng(geometry.coordinates[1], geometry.coordinates[0]);
-	                    // TODO: get the popup shift from the style
-	                }
-	                this._popup.setLatLng(latlng);
-	                this._popup.openOn(this._map);
+	        }
+	    },
+
+	    // -----------------------------------------------------------------------
+
+	    loadData: function loadData(bbox, callback) {
+	        var provider = this._getDataProvider();
+	        return provider.loadData({
+	            bbox: bbox
+	        }, callback);
+	    },
+
+	    loadDataAround: function loadDataAround(latlng, radiusInPixels, callback) {
+	        var bbox = this.pixelsToBbox(latlng, radiusInPixels);
+	        return this.loadData(bbox, function (err, list) {
+	            if (err) {
+	                return callback(err);
+	            } else {
+	                // TODO: add data filtering; return only geometries
+	                // intersecting with the bbox.
+	                // list = filter(list);
+	                return callback(null, list);
 	            }
+	        });
+	    },
+
+	    openPopup: function openPopup(latlng) {
+	        if (this._popup) {
+	            var provider = this._getDataProvider();
+
+	            var geometry = provider.getGeometry(data[0]);
+	            if (geometry.type === 'Point') {
+	                latlng = L.latLng(geometry.coordinates[1], geometry.coordinates[0]);
+	                // TODO: get the popup shift from the style
+	            }
+	            this._popup.setLatLng(latlng);
+	            this._popup.openOn(this._map);
 	        }
 	    },
 
 	    _onMouseMove: function _onMouseMove(ev) {
-	        var data = this._getDataByCoordinates(ev.latlng);
-	        if (!!data) {
-	            ev.array = data;
-	            ev.data = data[0];
+	        if (!this._isTransparent(ev.latlng)) {
+	            ev.target = this;
+	            ev.map = this._map;
+	            // ev.array = data;
+	            // ev.data = data[0];
 	            this.fire('mousemove', ev);
-	            this._setMouseOverStyle(true);
+	            this._setMouseOverStyle(true, ev);
 	        } else {
-	            this._setMouseOverStyle(false);
+	            this._setMouseOverStyle(false, ev);
 	        }
 	    },
 
-	    _setMouseOverStyle: function _setMouseOverStyle(set) {
+	    _setMouseOverStyle: function _setMouseOverStyle(set, ev) {
 	        set = !!set;
 	        if (!!this._mouseover !== set) {
 	            var delta = set ? 1 : -1;
@@ -363,8 +431,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	            var el = this._map._container;
 	            if (!!this._map._mouseoverCounter) {
 	                el.style.cursor = 'pointer';
+	                this.fire('mouseenter', ev);
 	            } else {
 	                el.style.cursor = 'auto';
+	                this.fire('mouseleave', ev);
 	            }
 	        }
 	        this._mouseover = set;
@@ -407,35 +477,21 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this.options = options || {};
 	        this._canvas = this.options.canvas;
 	        this._context = this._newCanvasContext(this._canvas);
-	        // console.log('fields:', getFields(this._context));
 	    },
 
 	    _newCanvasContext: function _newCanvasContext(canvas) {
 	        var g = canvas.getContext('2d');
 	        return g;
+	    },
 
-	        var obj = {};
-	        var fields = {};
-	        for (var name in g) {
-	            (function (name) {
-	                if (typeof g[name] === 'function') {
-	                    obj[name] = function () {
-	                        return g[name].apply(g, arguments);
-	                    };
-	                } else {
-	                    fields[name] = {
-	                        get: function get() {
-	                            return g[name];
-	                        },
-	                        set: function set(v) {
-	                            g[name] = v;
-	                        }
-	                    };
-	                }
-	            })(name);
-	        }
-	        Object.defineProperties(obj, fields);
-	        return obj;
+	    /**
+	     * Returns <code>true</code> if a pixel in the specified position is
+	     * transparent
+	     */
+	    isTransparent: function isTransparent(x, y) {
+	        var imageData = this._context.getImageData(x, y, 1, 1);
+	        var data = imageData.data;
+	        return data[3] === 0;
 	    },
 
 	    // -----------------------------------------------------------------------
@@ -461,27 +517,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	    drawImage: function drawImage(image, position, options) {
 	        this._drawOnCanvasContext(options, function (g) {
 	            g.globalCompositeOperation = 'source-over';
-	            // var mask = this._getImageData(image);
+	            g.globalAlpha = 1;
 	            g.drawImage(image, position[0], position[1]);
 	            return true;
 	        });
-	    },
-
-	    _getImageData: function _getImageData(image) {
-	        if (!image._data) {
-	            var g;
-	            if (image.tagName === 'CANVAS') {
-	                g = image.getContext('2d');
-	            } else {
-	                var canvas = document.createElement('canvas');
-	                canvas.width = image.width;
-	                canvas.height = image.height;
-	                g = canvas.getContext('2d');
-	                g.drawImage(image, 0, 0, canvas.width, canvas.heigth);
-	            }
-	            image._data = g.getImageData(0, 0, image.width, image.height);
-	        }
-	        return image._data;
 	    },
 
 	    // -----------------------------------------------------------------------
@@ -490,93 +529,48 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Draws a line defined by the specified sequence of points.
 	     */
-	    drawLine: function drawLine(points, options) {
-	        var strokeStyles = this._getStrokeStyles(options);
-	        if (!strokeStyles) return;
+	    drawLines: function drawLines(coords, options) {
 	        this._drawOnCanvasContext(options, function (g) {
-	            // Simplify point sequence
-	            points = this._simplify(points);
 	            // Trace the line
-	            g.globalCompositeOperation = 'source-over';
-	            return this._drawLines(g, points, strokeStyles);
+	            this._setCanvasStyles(g, options);
+	            g.beginPath();
+	            for (var i = 0; i < coords.length; i++) {
+	                // Simplify point sequence
+	                var segment = this._simplify(coords[i]);
+	                this._trace(g, segment);
+	            }
+	            g.stroke();
+	            g.closePath();
 	        });
 	    },
 
 	    /**
 	     * Draws polygons with holes on the canvas.
 	     */
-	    drawPolygon: function drawPolygon(polygons, holes, options) {
-	        // Get styles
-	        var fillStyles = this._getFillStyles(options);
-	        var strokeStyles = this._getStrokeStyles(options);
-	        // Return if there is no styles defined for these polygons
-	        if (!fillStyles && !strokeStyles) return;
+	    drawPolygon: function drawPolygon(polygon, options) {
 	        // Create new canvas where the polygon should be drawn
 	        this._drawOnCanvasContext(options, function (g) {
-	            var i;
-	            // Simplify lines
-	            polygons = this._simplify(polygons);
-	            holes = holes || [];
-	            for (i = 0; i < holes.length; i++) {
-	                holes[i] = this._simplify(holes[i]);
-	            }
-
-	            // Draw the polygon itself
-	            g.globalCompositeOperation = 'source-over';
-	            if (fillStyles) {
-	                this._setCanvasStyles(g, fillStyles);
-	                if (fillStyles._pattern) {
-	                    g.fillStyle = g.createPattern(fillStyles._pattern, "repeat");
+	            this._setCanvasStyles(g, options);
+	            g.beginPath();
+	            for (var i = 0; i < polygon.length; i++) {
+	                var ring = this._simplify(polygon[i]);
+	                if (ring && ring.length) {
+	                    var clockwise = i === 0;
+	                    if (GeometryUtils.isClockwise(ring) !== !!clockwise) {
+	                        ring.reverse();
+	                    }
 	                }
-	                g.beginPath();
-	                this._trace(g, polygons[0]);
-	                g.closePath();
-	                g.fill();
+	                this._trace(g, ring);
 	            }
-
-	            // Draw lines around the polygon (external lines)
-	            this._drawLines(g, polygons, strokeStyles);
-
-	            // Remove holes areas from the polygon
-	            g.globalCompositeOperation = 'destination-out';
-	            g.globalAlpha = 1;
-	            for (i = 0; i < holes.length; i++) {
-	                if (holes[i].length) {
-	                    g.beginPath();
-	                    this._trace(g, holes[i]);
-	                    g.closePath();
-	                    g.fill();
-	                }
-	            }
-
-	            g.globalCompositeOperation = 'source-over';
-	            // Draw lines around the polygon holes
-	            for (i = 0; i < holes.length; i++) {
-	                this._drawLines(g, holes[i], strokeStyles);
-	            }
+	            g.fill();
+	            g.stroke();
+	            g.closePath();
 	            return true;
 	        });
 	    },
 
 	    // -----------------------------------------------------------------------
 	    // Private methods
-
-	    /**
-	     * Draws lines with the specified coordinates and styles.
-	     */
-	    _drawLines: function _drawLines(g, coords, styles) {
-	        if (!styles) return false;
-	        if (!coords.length) return false;
-	        g.globalCompositeOperation = 'source-over';
-	        this._setCanvasStyles(g, styles);
-	        g.beginPath();
-	        for (var i = 0; i < coords.length; i++) {
-	            this._trace(g, coords[i]);
-	            g.stroke();
-	        }
-	        // g.closePath();
-	        return true;
-	    },
 
 	    /**
 	     * Trace the specified path on the given canvas context.
@@ -596,44 +590,10 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	    /** Simplifies the given line. */
 	    _simplify: function _simplify(coords) {
-	        return [].concat(coords);
 	        var tolerance = this.options.tolerance || 0.8;
 	        var enableHighQuality = !!this.options.highQuality;
 	        var points = GeometryUtils.simplify(coords, tolerance, enableHighQuality);
 	        return points;
-	    },
-
-	    /**
-	     * Copies fill styles from the specified options object to a separate style
-	     * object. Returns <code>null</code> if the options do not contain
-	     * required styles.
-	     */
-	    _getFillStyles: function _getFillStyles(options) {
-	        var styles = {};
-	        styles.fillStyle = options.fillColor || options.color || 'blue';
-	        styles.globalAlpha = options.globalAlpha || options.fillOpacity || options.opacity || 0;
-	        if (options.fillImage) {
-	            styles._pattern = options.fillImage;
-	        }
-	        if (this._isEmptyValue(styles.globalAlpha) && !styles._pattern) return null;
-	        return styles;
-	    },
-
-	    /**
-	     * Copies stroke styles from the specified options object to a separate
-	     * style object. Returns <code>null</code> if options do not contain
-	     * required styles.
-	     */
-	    _getStrokeStyles: function _getStrokeStyles(options) {
-	        var styles = {};
-	        styles.strokeStyle = options.lineColor || options.color || 'blue';
-	        styles.globalAlpha = options.lineOpacity || options.opacity || 0;
-	        styles.lineWidth = options.lineWidth || options.width || 0;
-	        styles.lineCap = options.lineCap || 'round'; // 'butt|round|square'
-	        styles.lineJoin = options.lineJoin || 'round'; // 'miter|round|bevel'
-	        if (this._isEmptyValue(styles.lineWidth) || //
-	        this._isEmptyValue(styles.globalAlpha)) return null;
-	        return styles;
 	    },
 
 	    /**
@@ -646,11 +606,17 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Copies styles from the specified style object to the canvas context.
 	     */
-	    _setCanvasStyles: function _setCanvasStyles(g, styles) {
-	        for (var key in styles) {
-	            if (!key || key[0] === '_') continue;
-	            g[key] = styles[key];
+	    _setCanvasStyles: function _setCanvasStyles(g, options) {
+	        if (!options) return;
+	        g.globalAlpha = options.globalAlpha || options.fillOpacity || options.lineOpacity || options.opacity || 0;
+	        g.fillStyle = options.fillColor || options.color;
+	        if (options.fillImage) {
+	            g.fillStyle = g.createPattern(options.fillImage, "repeat");
 	        }
+	        g.strokeStyle = options.lineColor || options.color;
+	        g.lineWidth = options.lineWidth || options.width || 0;
+	        g.lineCap = options.lineCap || 'round'; // 'butt|round|square'
+	        g.lineJoin = options.lineJoin || 'round'; // 'miter|round|bevel'
 	    },
 
 	    // -----------------------------------------------------------------------
@@ -671,9 +637,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	        // data[idx + 0] = blue;
 	        // }
 	        // }
-
-	        // console.log(' _drawOnCanvasContext', this.options);
-	        f.call(this, this._context);
+	        this._context.save();
+	        try {
+	            return f.call(this, this._context);
+	        } finally {
+	            this._context.restore();
+	        }
 	    }
 
 	});
@@ -709,46 +678,105 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	module.exports = {
 
-	    getClippingPolygon: function getClippingPolygon(bbox) {
-	        var xmin = Math.min(bbox[0][0], bbox[1][0]);
-	        var ymin = Math.min(bbox[0][1], bbox[1][1]);
-	        var xmax = Math.max(bbox[0][0], bbox[1][0]);
-	        var ymax = Math.max(bbox[0][1], bbox[1][1]);
-	        return [[xmin, ymin], [xmin, ymax], [xmax, ymax], [xmax, ymin], [xmin, ymin]];
-	        return [[xmin, ymin], [xmax, ymin], [xmax, ymax], [xmin, ymax], [xmin, ymin]];
+	    // ------------------------------------------------------------------------
+	    // Points
 
-	        return [[bbox[0][0], bbox[0][1]], [bbox[0][0], bbox[1][1]], [bbox[1][0], bbox[1][1]], [bbox[1][0], bbox[0][1]], [bbox[0][0], bbox[0][1]]];
-	    },
-
-	    clipPoints: function clipPoints(points, bounds) {
-	        function inRange(val, a, b) {
-	            return (val - a) * (val - b) <= 0;
-	        }
+	    /**
+	     * Gets a list of points (as a sequence of [x,y] coordinates) and returns
+	     * points in the specified bounding box.
+	     */
+	    clipPoints: function clipPoints(points, bbox) {
 	        var result = [];
 	        for (var i = 0; i < points.length; i++) {
 	            var point = points[i];
-	            if (inRange(point[0], bounds[0][0], bounds[1][0]) && inRange(point[1], bounds[0][1], bounds[1][1])) {
+	            if (this.bboxContainsPoint(point, bbox)) {
 	                result.push(point);
 	            }
 	        }
 	        return result;
 	    },
 
-	    clipLines: function clipLines(lines, bounds) {
+	    /**
+	     * Returns <code>true</code> a point is contained in the specified
+	     * bounding box.
+	     */
+	    bboxContainsPoints: function bboxContainsPoints(points, bbox) {
+	        for (var i = 0; i < points.length; i++) {
+	            if (this.bboxContainsPoint(points[i], bbox)) return true;
+	        }
+	        return false;
+	    },
+
+	    /**
+	     * Returns <code>true</code> a point is contained in the specified
+	     * bounding box.
+	     */
+	    bboxContainsPoint: function bboxContainsPoint(point, bbox) {
+	        return inRange(point[0], bbox[0][0], bbox[1][0]) && inRange(point[1], bbox[0][1], bbox[1][1]);
+	        function inRange(val, a, b) {
+	            return (val - a) * (val - b) <= 0;
+	        }
+	    },
+
+	    // ------------------------------------------------------------------------
+	    // Lines
+
+	    /**
+	     * Returns true if the specified poly-line (defined as a sequence of [x,y]
+	     * coordinates of their segments) has intersections with the specified
+	     * bounding box.
+	     */
+	    bboxIntersectsLines: function bboxIntersectsLines(lines, bbox) {
+	        for (var i = 0; i < lines.length; i++) {
+	            if (this.bboxIntersectsLine(lines[i], bbox)) return true;
+	        }
+	        return false;
+	    },
+
+	    /**
+	     * Returns true if the specified poly-line (defined as a sequence of [x,y]
+	     * coordinates of their segments) has intersections with the specified
+	     * bounding box.
+	     */
+	    bboxIntersectsLine: function bboxIntersectsLine(line, bbox) {
+	        var prev = line[0];
+	        for (var i = 1; i < line.length; i++) {
+	            var next = line[i];
+	            var clipped = this.clipLine([prev, next], bbox);
+	            if (clipped) {
+	                return true;
+	            }
+	            prev = next;
+	        }
+	        return false;
+	    },
+
+	    /**
+	     * Trims a multiline defined as a sequence of coordinates [x,y] by the
+	     * specified bounding box and returns the clipped result.
+	     */
+	    clipLines: function clipLines(lines, bbox) {
 	        var result = [];
 	        var prev = lines[0];
 	        for (var i = 1; i < lines.length; i++) {
 	            var next = lines[i];
-	            var clipped = this.clipLine([prev, next], bounds);
+	            var clipped = this.clipLine([prev, next], bbox);
 	            if (clipped) {
-	                result.push(clipped);
+	                var last = result.length ? result[result.length - 1] : null;
+	                if (!last || last[0] !== clipped[0][0] || last[1] !== clipped[0][1]) {
+	                    result.push(clipped[0]);
+	                }
+	                result.push(clipped[1]);
 	            }
 	            prev = next;
 	        }
 	        return result;
 	    },
 
-	    // Cohen-Sutherland line-clipping algorithm
+	    /**
+	     * Cohen-Sutherland line-clipping algorithm. It is used to clip one line
+	     * segment.
+	     */
 	    clipLine: (function () {
 	        function getCode(x, y, xmin, ymin, xmax, ymax) {
 	            var oc = 0;
@@ -809,66 +837,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        };
 	    })(),
 
-	    clipPolygon: function clipPolygon(subjectPolygon, _clipPolygon, round) {
-	        var subj = [].concat(subjectPolygon);
-	        subj.pop();
-	        var clip = [].concat(_clipPolygon);
-	        clip.pop();
-	        var result = this._clipPolygon(subj, clip, round);
-	        return result;
-	    },
-
-	    // Sutherland Hodgman polygon clipping algorithm
-	    // http://rosettacode.org/wiki/Sutherland-Hodgman_polygon_clipping
-	    _clipPolygon: function _clipPolygon(subjectPolygon, clipPolygon, r) {
-	        r = r || Math.round;
-	        var cp1, cp2, s, e;
-	        var inside = function inside(p) {
-	            return (cp2[0] - cp1[0]) * ( //
-	            p[1] - cp1[1]) > (cp2[1] - cp1[1]) * ( //
-	            p[0] - cp1[0]);
-	        };
-	        var round = function round(point) {
-	            return [r(point[0]), r(point[1])];
-	        };
-	        var intersection = function intersection() {
-	            var dc = [cp1[0] - cp2[0], cp1[1] - cp2[1]];
-	            var dp = [s[0] - e[0], s[1] - e[1]];
-	            var n1 = cp1[0] * cp2[1] - cp1[1] * cp2[0];
-	            var n2 = s[0] * e[1] - s[1] * e[0];
-	            var n3 = 1.0 / (dc[0] * dp[1] - dc[1] * dp[0]);
-	            return [(n1 * dp[0] - n2 * dc[0]) * n3, (n1 * dp[1] - n2 * dc[1]) * n3];
-	        };
-	        var outputList = subjectPolygon;
-	        cp1 = clipPolygon[clipPolygon.length - 1];
-	        for (var j in clipPolygon) {
-	            cp2 = clipPolygon[j];
-	            var inputList = outputList;
-	            outputList = [];
-	            s = inputList[inputList.length - 1]; // last on the input list
-	            for (var i in inputList) {
-	                e = inputList[i];
-	                if (inside(e)) {
-	                    if (!inside(s)) {
-	                        outputList.push(round(intersection()));
-	                    }
-	                    outputList.push(round(e));
-	                } else if (inside(s)) {
-	                    outputList.push(round(intersection()));
-	                }
-	                s = e;
-	            }
-	            cp1 = cp2;
-	        }
-	        if (outputList && outputList.length) {
-	            outputList.push(outputList[0]);
-	        }
-	        return outputList || [];
-	    },
-
 	    /**
-	     * This method simplifies the specified line by reducing the number of
-	     * points but it keeps the total "form" of the line.
+	     * This method simplifies the specified line (given as a sequence of
+	     * [x,y] coordinates of their points) by reducing the number of points but
+	     * it keeps the total "form" of the line.
 	     * 
 	     * @param line
 	     *            a sequence of points to simplify
@@ -1004,7 +976,134 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 
 	        return simplify;
-	    })()
+	    })(),
+
+	    // ------------------------------------------------------------------------
+	    // Polygons
+
+	    /**
+	     * Transforms a bounding box to a closed clipping polygon with clockwise
+	     * order of coordinates.
+	     * 
+	     * @param bbox
+	     *            [[xmin,ymin],[xmax,ymax]]
+	     * @return a clipping rectangle with the following coordinates:
+	     *         [[xmin,ymin],[xmin,ymax],[xmax,ymax],[xmax,ymin],[xmin,ymin]]
+	     */
+	    getClippingPolygon: function getClippingPolygon(bbox) {
+	        var xmin = Math.min(bbox[0][0], bbox[1][0]);
+	        var ymin = Math.min(bbox[0][1], bbox[1][1]);
+	        var xmax = Math.max(bbox[0][0], bbox[1][0]);
+	        var ymax = Math.max(bbox[0][1], bbox[1][1]);
+	        return [[xmin, ymin], [xmin, ymax], [xmax, ymax], [xmax, ymin], [xmin, ymin]];
+	    },
+
+	    /**
+	     * Returns <code>true</code> if the specified sequence of points are
+	     * arranged in the clockwise order.
+	     */
+	    isClockwise: function isClockwise(coords) {
+	        var i,
+	            j,
+	            area = 0;
+	        for (i = 0; i < coords.length; i++) {
+	            j = (i + 1) % coords.length;
+	            area += coords[i][0] * coords[j][1];
+	            area -= coords[j][0] * coords[i][1];
+	        }
+	        return area < 0;
+	    },
+
+	    /**
+	     * Returns <code>true</code> if the specified bounding box is intersects
+	     * at least one of the given polygons.
+	     */
+	    bboxIntersectsPolygons: function bboxIntersectsPolygons(polygons, bbox) {
+	        for (var i = 0; i < polygons.length; i++) {
+	            if (this.bboxIntersectsPolygon(polygons[i], bbox)) return true;
+	        }
+	        return false;
+	    },
+
+	    /**
+	     * Returns <code>true</code> if the specified bounding box is intersects
+	     * with the given polygon.
+	     */
+	    bboxIntersectsPolygon: function bboxIntersectsPolygon(polygon, bbox) {
+	        var polygon = this.getClippingPolygon(bbox);
+	        var result = this.clipPolygon(polygon, polygon);
+	        return !!result.length;
+	    },
+
+	    /**
+	     * Clips polygon by the specified bounding polygon (not a bounding box!).
+	     * The subject and clipping polygons are closed "rings" or [x,y] coordinate
+	     * arrays (the last and the first coordinates in each sequence should be the
+	     * same).
+	     */
+	    clipPolygon: function clipPolygon(subjectPolygon, _clipPolygon) {
+	        var subj = [].concat(subjectPolygon);
+	        if (!this.isClockwise(subj)) {
+	            subj.reverse();
+	        }
+
+	        var clip = [].concat(_clipPolygon);
+	        if (this.isClockwise(clip)) {
+	            clip.reverse();
+	        }
+
+	        var result = this._clipPolygon(subj, clip);
+	        return result;
+	    },
+
+	    // Sutherland Hodgman polygon clipping algorithm
+	    // http://rosettacode.org/wiki/Sutherland-Hodgman_polygon_clipping
+	    _clipPolygon: function _clipPolygon(subjectPolygon, clipPolygon) {
+	        var cp1, cp2, s, e;
+	        var inside = function inside(p) {
+	            return (cp2[0] - cp1[0]) * ( //
+	            p[1] - cp1[1]) > (cp2[1] - cp1[1]) * ( //
+	            p[0] - cp1[0]);
+	        };
+	        var intersection = function intersection() {
+	            var dc = [cp1[0] - cp2[0], cp1[1] - cp2[1]];
+	            var dp = [s[0] - e[0], s[1] - e[1]];
+	            var n1 = cp1[0] * cp2[1] - cp1[1] * cp2[0];
+	            var n2 = s[0] * e[1] - s[1] * e[0];
+	            var n3 = 1.0 / (dc[0] * dp[1] - dc[1] * dp[0]);
+	            return [(n1 * dp[0] - n2 * dc[0]) * n3, (n1 * dp[1] - n2 * dc[1]) * n3];
+	        };
+	        var outputList = subjectPolygon;
+	        var outputLen = subjectPolygon.length - 1;
+	        var clipLen = clipPolygon.length - 1;
+	        cp1 = clipPolygon[clipLen - 1];
+	        for (var j = 0; j < clipLen; j++) {
+	            cp2 = clipPolygon[j];
+	            var inputList = outputList;
+	            var inputLen = outputLen;
+	            outputList = [];
+	            s = inputList[inputLen - 1]; // last on the input list
+	            for (var i = 0; i < inputLen; i++) {
+	                e = inputList[i];
+	                if (inside(e)) {
+	                    if (!inside(s)) {
+	                        outputList.push(intersection());
+	                    }
+	                    outputList.push(e);
+	                } else if (inside(s)) {
+	                    outputList.push(intersection());
+	                }
+	                s = e;
+	            }
+	            cp1 = cp2;
+	            outputLen = outputList.length;
+	        }
+	        if (outputList && outputList.length && outputList !== subjectPolygon) {
+	            outputList.push(outputList[0]);
+	        }
+	        return outputList || [];
+	    }
+
 	};
 
 /***/ },
@@ -1050,120 +1149,394 @@ return /******/ (function(modules) { // webpackBootstrap
 	'use strict';
 
 	var extend = __webpack_require__(4);
-	var CanvasContext = __webpack_require__(3);
-	var ImageGridIndex = __webpack_require__(8);
+	var GeometryUtils = __webpack_require__(5);
+	var GeoJsonUtils = __webpack_require__(8);
 
 	/**
-	 * This utility class allows to associate data with non-transparent pixels of
-	 * images drawn on canvas.
+	 * A common interface visualizing data on canvas.
 	 */
-	function CanvasIndexingContext() {
-	    CanvasContext.apply(this, arguments);
+	function GeometryRenderer() {
+	    this.initialize.apply(this, arguments);
 	}
-	CanvasIndexingContext.stampImage = ImageGridIndex.stampImage;
-	extend(CanvasIndexingContext, CanvasContext);
-	extend(CanvasIndexingContext.prototype, CanvasContext.prototype, {
+	extend(GeometryRenderer.prototype, {
 
-	    /**
-	     * Initializes internal fields of this class.
-	     * 
-	     * @param options.canvas
-	     *            mandatory canvas object used to draw images
-	     * @param options.resolution
-	     *            optional resolution field defining precision of image areas
-	     *            associated with data; by default it is 4x4 pixel areas
-	     *            (resolution = 4)
-	     */
+	    /** Initializes fields of this object. */
 	    initialize: function initialize(options) {
-	        CanvasContext.prototype.initialize.apply(this, arguments);
-	        // Re-define a method returning unique image identifiers.
-	        if (typeof this.options.getImageKey === 'function') {
-	            this.getImageKey = this.options.getImageKey;
-	        }
-	        this.index = new ImageGridIndex(options);
-	    },
-
-	    /**
-	     * Draws the specified image in the given position on the underlying canvas.
-	     */
-	    drawImage: function drawImage(image, position, options) {
-	        if (!image || !position) return;
-	        var x = position[0];
-	        var y = position[1];
-	        // Draw the image on the canvas
-	        this._context.drawImage(image, x, y);
-	        // Associate non-transparent pixels of the image with data
-	        this.index.indexImage(image, x, y, options);
-	    },
-
-	    _drawOnCanvasContext: function _drawOnCanvasContext(options, f) {
-	        // Create new canvas where the polygon should be drawn
-	        var canvas = this._newCanvas();
-	        var g = canvas.getContext('2d');
-	        var ok = f.call(this, g);
-	        if (ok) {
-	            this.drawImage(canvas, [0, 0], options);
+	        this.options = options || {};
+	        this.context = this.options.context;
+	        if (!this.context) {
+	            throw new Error('The "context" (CanvasContext) is not defined ');
 	        }
 	    },
 
+	    // -----------------------------------------------------------------------
+	    // The following methods should be overloaded in subclasses
+
 	    /**
-	     * Creates and returns a new canvas used to draw individual features.
+	     * Draws the specified resource on the given canvas context.
+	     * 
+	     * @param resource
+	     *            the resource to render
+	     * @param styles
+	     *            style provider defining how features should be visualized
 	     */
-	    _newCanvas: function _newCanvas() {
-	        var canvas;
-	        var width = this._canvas.width;
-	        var height = this._canvas.height;
-	        if (this.options.newCanvas) {
-	            canvas = this.options.newCanvas(width, height);
-	        } else {
-	            canvas = document.createElement('canvas');
-	            canvas.width = width;
-	            canvas.height = height;
+	    drawFeature: function drawFeature(resource, styles, options) {
+	        var that = this;
+	        var geometry = this._getGeometry(resource, options);
+	        if (!geometry) return;
+	        return GeoJsonUtils.forEachGeometry(geometry, {
+	            onPoints: function onPoints(points) {
+	                points = that._prepareMarkerCoordinates(points);
+	                if (points.length) {
+	                    for (var i = 0; i < points.length; i++) {
+	                        var point = points[i];
+	                        _drawMarker(point, i);
+	                    }
+	                }
+	            },
+	            onLines: function onLines(lines) {
+	                var lineStyle = styles.getLineStyle(resource, extend({}, options, {
+	                    coords: lines,
+	                    data: resource
+	                }));
+	                if (!lineStyle) return;
+	                var segments = [];
+	                for (var i = 0; i < lines.length; i++) {
+	                    var segment = that._prepareLineCoordinates(lines[i]);
+	                    segments.push(segment);
+	                }
+	                that.context.drawLines(segments, extend({
+	                    data: resource
+	                }, lineStyle));
+	                // _drawMarker([ 0, 0 ]);
+	            },
+	            onPolygons: function onPolygons(polygons) {
+	                for (var i = 0; i < polygons.length; i++) {
+	                    this._onPolygon(polygons[i]);
+	                }
+	            },
+	            _onPolygon: function _onPolygon(polygon) {
+	                var polygonStyle = styles.getPolygonStyle(resource, extend({}, options, {
+	                    coords: polygon,
+	                    data: resource
+	                }));
+	                if (!polygonStyle) return;
+	                var coords = [];
+	                for (var i = 0; i < polygon.length; i++) {
+	                    var ring = that._preparePolygonCoordinates(polygon[i]);
+	                    if (ring.length) {
+	                        coords.push(ring);
+	                    }
+	                }
+	                that.context.drawPolygon(coords, extend({
+	                    data: resource
+	                }, polygonStyle));
+	                // _drawMarker([ 0, 0 ]);
+	            }
+	        });
+
+	        function _drawMarker(point) {
+	            var markerStyle = styles.getMarkerStyle(resource, extend({}, options, {
+	                point: point,
+	                data: resource
+	            }));
+	            if (!markerStyle || !markerStyle.image) return;
+
+	            var pos = [point[0], point[1]]; // Copy
+	            if (markerStyle.anchor) {
+	                pos[0] -= markerStyle.anchor[0];
+	                pos[1] -= markerStyle.anchor[1];
+	            }
+	            that.context.drawImage(markerStyle.image, pos, extend({
+	                data: resource
+	            }, markerStyle));
 	        }
-	        return canvas;
+	    },
+
+	    // ------------------------------------------------------------------
+
+	    _prepareLineCoordinates: function _prepareLineCoordinates(coords) {
+	        var clipPolygon = this._getClipPolygon();
+	        if (clipPolygon.length) {
+	            var bbox = [clipPolygon[0], clipPolygon[2]];
+	            coords = GeometryUtils.clipLines(coords, bbox);
+	        }
+	        coords = this._getProjectedPoints(coords);
+	        return coords;
+	    },
+
+	    _prepareMarkerCoordinates: function _prepareMarkerCoordinates(coords) {
+	        var clipPolygon = this._getClipPolygon();
+	        if (clipPolygon.length) {
+	            var bbox = [clipPolygon[0], clipPolygon[2]];
+	            coords = GeometryUtils.clipPoints(coords, bbox);
+	        }
+	        coords = this._getProjectedPoints(coords);
+	        return coords;
+	    },
+
+	    _preparePolygonCoordinates: function _preparePolygonCoordinates(coords) {
+	        var clipPolygon = this._getClipPolygon();
+	        if (clipPolygon.length) {
+	            var newCoords = GeometryUtils.clipPolygon(coords, clipPolygon);
+	            coords = newCoords;
+	        }
+	        coords = this._getProjectedPoints(coords);
+	        return coords;
+	    },
+
+	    _getClipPolygon: function _getClipPolygon() {
+	        if (this._clipPolygon === undefined) {
+	            var clip;
+	            if (this.options.bbox) {
+	                clip = GeometryUtils.getClippingPolygon(this.options.bbox);
+	            }
+	            this._clipPolygon = clip || [];
+	        }
+	        return this._clipPolygon;
+	    },
+
+	    // ------------------------------------------------------------------
+
+	    _getGeometry: function _getGeometry(resource) {
+	        if (typeof this.options.getGeometry === 'function') {
+	            return this.options.getGeometry(resource);
+	        }
+	        return resource.geometry;
 	    },
 
 	    /**
-	     * Returns data associated with the specified position on the canvas.
+	     * Returns an array of projected points.
 	     */
-	    getData: function getData(x, y) {
-	        return this.index.getData(x, y);
+	    _getProjectedPoints: function _getProjectedPoints(coordinates) {
+	        // if (typeof this.options.project === 'function') {
+	        this._getProjectedPoints = function (coordinates) {
+	            return this.options.project(coordinates);
+	        };
+	        return this._getProjectedPoints(coordinates);
+	        // }
+	        // // FIXME: projected points calculation do not work as
+	        // expected
+	        // var t = this.getTransformation();
+	        // var s = this.getScale();
+	        // var origin = this.getOrigin();
+	        // var o = t.direct(origin[0], origin[1], s);
+	        // var result = [];
+	        // for (var i = 0; i < coordinates.length; i++) {
+	        // var p = coordinates[i];
+	        // var point = t.direct(p[0], p[1], s);
+	        // point[0] = Math.round(point[0] - o[0]);
+	        // point[1] = Math.round(point[1] - o[1]);
+	        // result.push(point);
+	        // }
+	        // return result;
 	    },
 
-	    /**
-	     * Returns all data objects associated with the specified position on the
-	     * canvas.
-	     */
-	    getAllData: function getAllData(x, y) {
-	        return this.index.getAllData(x, y);
-	    },
+	    // getTransformation : function() {
+	    // if (!this._transformation) {
+	    // this._transformation = this.options.transformation
+	    // || transform(1 / 180, 0, -1 / 90, 0);
+	    // function transform(a, b, c, d) {
+	    // return {
+	    // direct : function(x, y, scale) {
+	    // return [ scale * (x * a + b), scale * (y * c + d) ];
+	    // },
+	    // inverse : function(x, y, scale) {
+	    // return [ (x / scale - b) / a, (y / scale - d) / c ];
+	    // }
+	    // };
+	    // }
+	    // }
+	    // return this._transformation;
+	    // },
+	    //
+	    // /** Returns the current scale */
+	    // getScale : function() {
+	    // return this.options.scale || 1;
+	    // },
 
-	    /**
-	     * Sets data in the specified position on the canvas.
-	     */
-	    setData: function setData(x, y, data) {
-	        return this.index.setData(x, y, data);
-	    },
-
-	    /**
-	     * Removes all data from internal indexes and cleans up underlying canvas.
-	     */
-	    reset: function reset() {
-	        var g = this._context;
-	        g.clearRect(0, 0, this._canvas.width, this._canvas.height);
-	        this.index.reset();
+	    /** Returns the initial shift */
+	    getOrigin: function getOrigin() {
+	        return this.options.origin || [0, 0];
 	    }
 
 	});
-	module.exports = CanvasIndexingContext;
+
+	// defines how the world scales with zoom
+	GeometryRenderer.calculateScale = function (zoom, tileSize) {
+	    tileSize = tileSize || 256;
+	    return tileSize * Math.pow(2, zoom);
+	};
+
+	GeometryRenderer.calculateZoom = function (scale, tileSize) {
+	    tileSize = tileSize || 256;
+	    return Math.log(scale / tileSize) / Math.LN2;
+	};
+
+	module.exports = GeometryRenderer;
 
 /***/ },
 /* 8 */
+/***/ function(module, exports) {
+
+	/**
+	 * Calls the specified callback for each coordinate in the given geometry.
+	 */
+	'use strict';
+
+	module.exports.forEachCoordinate = function forEach(geometry, callback) {
+	    var j, k, l;
+	    var coords = geometry.coordinates;
+	    if (geometry.type === 'Point') {
+	        callback(coords);
+	    } else if (geometry.type === 'LineString' || geometry.type === 'MultiPoint') {
+	        for (j = 0; j < coords.length; j++) callback(coords[j]);
+	    } else if (geometry.type === 'Polygon' || geometry.type === 'MultiLineString') {
+	        var wrapShrink = geometry.type === 'Polygon' ? 1 : 0;
+	        for (j = 0; j < coords.length; j++) for (k = 0; k < coords[j].length - wrapShrink; k++) callback(coords[j][k]);
+	    } else if (geometry.type === 'MultiPolygon') {
+	        for (j = 0; j < coords.length; j++) for (k = 0; k < coords[j].length; k++) for (l = 0; l < coords[j][k].length - 1; l++) callback(coords[j][k][l]);
+	    } else {
+	        throw new Error('Unknown Geometry Type');
+	    }
+	};
+
+	/**
+	 * Returns a bounding box for the specified geometry.
+	 */
+	module.exports.getBoundingBox = function (geometry) {
+	    var extent = [[Infinity, Infinity], [-Infinity, -Infinity]];
+	    this.forEachCoordinate(geometry, function (coord) {
+	        if (extent[0][0] > coord[0]) extent[0][0] = coord[0];
+	        if (extent[0][1] > coord[1]) extent[0][1] = coord[1];
+	        if (extent[1][0] < coord[0]) extent[1][0] = coord[0];
+	        if (extent[1][1] < coord[1]) extent[1][1] = coord[1];
+	    });
+	    return extent;
+	};
+
+	/**
+	 * Calls a specified callback methods to notify about individual basic geometry
+	 * elements (points, lines, polygons).
+	 * 
+	 * @param geometry
+	 *            a GeoJson geometry object
+	 * @param callback.onPoints
+	 *            called to notify about a list of points
+	 * @param callback.onLines
+	 *            called to notify about a list of line segments
+	 * @param callback.onPolygons
+	 *            called to notify about a list of polygons
+	 */
+	module.exports.forEachGeometry = function (geometry, callback) {
+	    var coords = geometry.coordinates;
+	    switch (geometry.type) {
+	        case 'Point':
+	            coords = [coords];
+	        case 'MultiPoint':
+	            if (typeof callback.onPoints === 'function') {
+	                callback.onPoints(coords);
+	            }
+	            break;
+	        case 'LineString':
+	            coords = [coords];
+	        case 'MultiLineString':
+	            if (typeof callback.onLines === 'function') {
+	                callback.onLines(coords);
+	            }
+	            break;
+	        case 'Polygon':
+	            coords = [coords];
+	        case 'MultiPolygon':
+	            if (typeof callback.onPolygons === 'function') {
+	                callback.onPolygons(coords);
+	            }
+	            break;
+	        case 'GeometryCollection':
+	            var geoms = geometry.geometries;
+	            for (var i = 0, len = geoms.length; i < len; i++) {
+	                drawGeometry(geoms[i]);
+	            }
+	            break;
+	    }
+	};
+
+/***/ },
+/* 9 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var GridIndex = __webpack_require__(9);
+	module.exports = __webpack_require__(10);
+
+/***/ },
+/* 10 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	var extend = __webpack_require__(4);
+
+	function GeometryRenderStyle(options) {
+	    this.initialize(options);
+	}
+	extend(GeometryRenderStyle.prototype, {
+
+	    initialize: function initialize(options) {
+	        this.options = options || {};
+	        extend(this, this.options);
+	    },
+
+	    /**
+	     * Returns an object containing a marker image, image anchor point. If there
+	     * is no image returned then the marker is not shown.
+	     * 
+	     * @param resource
+	     *            the resource to draw
+	     * @param options.index
+	     *            index of the coordinates array; used for MultiXxx geometry
+	     *            types (MultiPolygon, MultiLine etc); if the index is not
+	     *            defined then this is request for a marker for the whole
+	     *            resource
+	     * @return object containing the following fields: 1) 'image' the image to
+	     *         draw as a marker 2) 'anchor' is an array with the X and Y
+	     *         coordinates of the anchor point of the marker (position on the
+	     *         image corresponding to the coordinates)
+	     */
+	    getMarkerStyle: function getMarkerStyle(resource, options) {
+	        return this._getStyle('marker', resource, options) || {
+	            image: undefined,
+	            anchor: [0, 0]
+	        };
+	    },
+
+	    getLineStyle: function getLineStyle(resource, options) {
+	        return this._getStyle('line', resource, options);
+	    },
+
+	    getPolygonStyle: function getPolygonStyle(resource, options) {
+	        return this._getStyle('polygon', resource, options);
+	    },
+
+	    _getStyle: function _getStyle(key, resource, options) {
+	        var style = this.options[key];
+	        if (typeof style === 'function') {
+	            style = style.call(this, resource, options);
+	        }
+	        return style;
+	    }
+
+	});
+
+	module.exports = GeometryRenderStyle;
+
+/***/ },
+/* 11 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	var GridIndex = __webpack_require__(12);
 	var extend = __webpack_require__(4);
 
 	function ImageGridIndex() {
@@ -1309,7 +1682,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = ImageGridIndex;
 
 /***/ },
-/* 9 */
+/* 12 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -1393,15 +1766,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	     */
 	    _addDataToIndex: function _addDataToIndex(key, options) {
 	        var data = options.data;
-	        if (!data) return;
+	        if (data === undefined) return;
 	        var array = this._dataIndex[key];
 	        if (!array || options.replace) {
 	            array = this._dataIndex[key] = [];
 	        }
 	        array.unshift(data);
-	        // if (array.length > 1) {
-	        // array.pop();
-	        // }
+	        array.count = (array.count || 0) + 1;
+	        while (array.length && array.length > (this.options.maxCellCapacity || 1)) {
+	            array.pop();
+	        }
 	    },
 
 	    _getIndexKey: function _getIndexKey(maskX, maskY) {
@@ -1410,362 +1784,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 
 	module.exports = GridIndex;
-
-/***/ },
-/* 10 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var extend = __webpack_require__(4);
-	var GeometryUtils = __webpack_require__(5);
-
-	/**
-	 * A common interface visualizing data on canvas.
-	 */
-	function GeometryRenderer() {
-	    this.initialize.apply(this, arguments);
-	}
-	extend(GeometryRenderer.prototype, {
-
-	    /** Initializes fields of this object. */
-	    initialize: function initialize(options) {
-	        this.options = options || {};
-	        this.context = this.options.context;
-	        if (!this.context) {
-	            throw new Error('The "context" (CanvasContext) is not defined ');
-	        }
-	    },
-
-	    // -----------------------------------------------------------------------
-	    // The following methods should be overloaded in subclasses
-
-	    /**
-	     * Draws the specified resource on the given canvas context.
-	     * 
-	     * @param resource
-	     *            the resource to render
-	     * @param styles
-	     *            style provider defining how features should be visualized
-	     */
-	    drawFeature: function drawFeature(resource, styles, options) {
-	        var that = this;
-	        var geometry = this._getGeometry(resource, options);
-	        if (geometry) {
-	            drawGeometry(geometry);
-	        }
-	        return;
-
-	        function _drawMarker(point, index) {
-	            var markerStyle = styles.getMarkerStyle(resource, extend({}, options, {
-	                index: index,
-	                point: point,
-	                data: resource
-	            }));
-	            if (!markerStyle || !markerStyle.image) return;
-
-	            var pos = [point[0], point[1]]; // Copy
-	            if (markerStyle.anchor) {
-	                pos[0] -= markerStyle.anchor[0];
-	                pos[1] -= markerStyle.anchor[1];
-	            }
-	            that.context.drawImage(markerStyle.image, pos, extend({
-	                data: resource
-	            }, markerStyle));
-	        }
-
-	        function drawMarkers(points) {
-	            points = that._prepareMarkerCoordinates(points);
-	            if (points.length) {
-	                for (var i = 0; i < points.length; i++) {
-	                    var point = points[i];
-	                    _drawMarker(point, i);
-	                }
-	            }
-	        }
-
-	        function drawLine(points, index) {
-	            var lineStyle = styles.getLineStyle(resource, extend({}, options, {
-	                points: points,
-	                index: index,
-	                data: resource
-	            }));
-	            if (!lineStyle) return;
-	            points = that._prepareLineCoordinates(points);
-	            that.context.drawLine(points, extend({
-	                data: resource
-	            }, lineStyle));
-	            // _drawMarker([ 0, 0 ]);
-	        }
-	        //
-	        function drawPolygon(coords, index) {
-	            var polygonStyle = styles.getPolygonStyle(resource, extend({}, options, {
-	                coords: coords,
-	                index: index,
-	                data: resource
-	            }));
-	            if (!polygonStyle) return;
-	            var polygon = that._preparePolygonCoordinates(coords[0]);
-	            var holes = [];
-	            for (var i = 1; i < coords.length; i++) {
-	                var hole = that._preparePolygonCoordinates(coords[i]);
-	                if (hole.length) {
-	                    holes.push(hole);
-	                }
-	            }
-	            that.context.drawPolygon([polygon], holes, extend({
-	                data: resource
-	            }, polygonStyle));
-	            // _drawMarker([ 0, 0 ]);
-	        }
-
-	        function drawGeometry(geometry) {
-	            var i, geom;
-	            var coords = geometry.coordinates;
-	            switch (geometry.type) {
-	                case 'Point':
-	                    drawMarkers([coords]);
-	                    break;
-	                case 'MultiPoint':
-	                    drawMarkers(coords);
-	                    break;
-	                case 'LineString':
-	                    drawLine(coords);
-	                    break;
-	                case 'MultiLineString':
-	                    for (i = 0; i < coords.length; i++) {
-	                        drawLine(coords[i], i);
-	                    }
-	                    break;
-	                case 'Polygon':
-	                    drawPolygon(coords);
-	                    break;
-	                case 'MultiPolygon':
-	                    for (i = 0; i < coords.length; i++) {
-	                        drawPolygon(coords[i], i);
-	                    }
-	                    break;
-	                case 'GeometryCollection':
-	                    geoms = geometry.geometries;
-	                    for (i = 0, len = geoms.length; i < len; i++) {
-	                        drawGeometry(geoms[i]);
-	                    }
-	                    break;
-	            }
-	        }
-	    },
-
-	    // ------------------------------------------------------------------
-
-	    _prepareLineCoordinates: function _prepareLineCoordinates(coords) {
-	        coords = this._simplify(coords);
-	        var clipPolygon = this._getClipPolygon();
-	        if (clipPolygon.length) {
-	            coords = GeometryUtils.clipLine(coords, clipPolygon);
-	        }
-	        coords = this._getProjectedPoints(coords);
-	        return coords;
-	    },
-
-	    _prepareMarkerCoordinates: function _prepareMarkerCoordinates(coords) {
-	        var clipPolygon = this._getClipPolygon();
-	        if (clipPolygon.length) {
-	            var bbox = [clipPolygon[0], clipPolygon[2]];
-	            coords = GeometryUtils.clipPoints(coords, bbox);
-	        }
-	        coords = this._getProjectedPoints(coords);
-	        return coords;
-	    },
-
-	    _preparePolygonCoordinates: function _preparePolygonCoordinates(coords) {
-	        coords = this._simplify(coords);
-	        var clipPolygon = this._getClipPolygon();
-	        if (clipPolygon.length) {
-	            var newCoords = GeometryUtils.clipPolygon(coords, clipPolygon);
-	            coords = newCoords;
-	        }
-	        coords = this._getProjectedPoints(coords);
-	        return coords;
-	    },
-
-	    _getClipPolygon: function _getClipPolygon() {
-	        if (this._clipPolygon === undefined) {
-	            var clip;
-	            if (this.options.bbox) {
-	                clip = GeometryUtils.getClippingPolygon(this.options.bbox);
-	                // clip = clip.reverse();
-	            }
-	            this._clipPolygon = clip || [];
-	        }
-	        return this._clipPolygon;
-	    },
-
-	    /** Simplifies the given line. */
-	    _simplify: function _simplify(coords) {
-	        return [].concat(coords);
-	        var tolerance = 0.8; // this.options.tolerance || 0.8;
-	        var enableHighQuality = !!this.options.highQuality;
-	        var points = GeometryUtils.simplify(coords, tolerance, enableHighQuality);
-	        return points;
-	    },
-
-	    // ------------------------------------------------------------------
-
-	    _getGeometry: function _getGeometry(resource) {
-	        if (typeof this.options.getGeometry === 'function') {
-	            return this.options.getGeometry(resource);
-	        }
-	        return resource.geometry;
-	    },
-
-	    /**
-	     * Returns an array of projected points.
-	     */
-	    _getProjectedPoints: function _getProjectedPoints(coordinates) {
-	        if (typeof this.options.project === 'function') {
-	            this._getProjectedPoints = function (coordinates) {
-	                return this.options.project(coordinates);
-	            };
-	            return this._getProjectedPoints(coordinates);
-	        }
-	        // FIXME: projected points calculation do not work as expected
-	        var t = this.getTransformation();
-	        var s = this.getScale();
-	        var origin = this.getOrigin();
-	        var o = t.direct(origin[0], origin[1], s);
-	        var result = [];
-	        for (var i = 0; i < coordinates.length; i++) {
-	            var p = coordinates[i];
-	            var point = t.direct(p[0], p[1], s);
-	            point[0] = Math.round(point[0] - o[0]);
-	            point[1] = Math.round(point[1] - o[1]);
-	            result.push(point);
-	        }
-	        return result;
-	    },
-
-	    getTransformation: function getTransformation() {
-	        if (!this._transformation) {
-	            var transform = function transform(a, b, c, d) {
-	                return {
-	                    direct: function direct(x, y, scale) {
-	                        return [scale * (x * a + b), scale * (y * c + d)];
-	                    },
-	                    inverse: function inverse(x, y, scale) {
-	                        return [(x / scale - b) / a, (y / scale - d) / c];
-	                    }
-	                };
-	            };
-
-	            this._transformation = this.options.transformation || transform(1 / 180, 0, -1 / 90, 0);
-	        }
-	        return this._transformation;
-	    },
-
-	    /** Returns the current scale */
-	    getScale: function getScale() {
-	        return this.options.scale || 1;
-	    },
-
-	    /** Returns the initial shift */
-	    getOrigin: function getOrigin() {
-	        return this.options.origin || [0, 0];
-	    }
-
-	});
-
-	// defines how the world scales with zoom
-	GeometryRenderer.calculateScale = function (zoom, tileSize) {
-	    tileSize = tileSize || 256;
-	    return tileSize * Math.pow(2, zoom);
-	};
-
-	GeometryRenderer.calculateZoom = function (scale, tileSize) {
-	    tileSize = tileSize || 256;
-	    return Math.log(scale / tileSize) / Math.LN2;
-	};
-
-	module.exports = GeometryRenderer;
-
-/***/ },
-/* 11 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var GeometryRendererStyle = __webpack_require__(12);
-	var extend = __webpack_require__(4);
-
-	function DataLayerStyle(options) {
-	    this.initialize(options);
-	}
-	extend(DataLayerStyle.prototype, GeometryRendererStyle.prototype, {
-	    enableInteraction: function enableInteraction(zoom) {
-	        return zoom > 9;
-	    }
-	});
-	module.exports = DataLayerStyle;
-
-/***/ },
-/* 12 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var extend = __webpack_require__(4);
-
-	function GeometryRenderStyle(options) {
-	    this.initialize(options);
-	}
-	extend(GeometryRenderStyle.prototype, {
-
-	    initialize: function initialize(options) {
-	        this.options = options || {};
-	        extend(this, this.options);
-	    },
-
-	    /**
-	     * Returns an object containing a marker image, image anchor point. If there
-	     * is no image returned then the marker is not shown.
-	     * 
-	     * @param resource
-	     *            the resource to draw
-	     * @param options.index
-	     *            index of the coordinates array; used for MultiXxx geometry
-	     *            types (MultiPolygon, MultiLine etc); if the index is not
-	     *            defined then this is request for a marker for the whole
-	     *            resource
-	     * @return object containing the following fields: 1) 'image' the image to
-	     *         draw as a marker 2) 'anchor' is an array with the X and Y
-	     *         coordinates of the anchor point of the marker (position on the
-	     *         image corresponding to the coordinates)
-	     */
-	    getMarkerStyle: function getMarkerStyle(resource, options) {
-	        return this._getStyle('marker', resource, options) || {
-	            image: undefined,
-	            anchor: [0, 0]
-	        };
-	    },
-
-	    getLineStyle: function getLineStyle(resource, options) {
-	        return this._getStyle('line', resource, options);
-	    },
-
-	    getPolygonStyle: function getPolygonStyle(resource, options) {
-	        return this._getStyle('polygon', resource, options);
-	    },
-
-	    _getStyle: function _getStyle(key, resource, options) {
-	        var style = this.options[key];
-	        if (typeof style === 'function') {
-	            style = style.call(this, resource, options);
-	        }
-	        return style;
-	    }
-
-	});
-
-	module.exports = GeometryRenderStyle;
 
 /***/ },
 /* 13 */
@@ -1814,7 +1832,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	'use strict';
 
 	var rbush = __webpack_require__(15);
-	var forEachCoordinate = __webpack_require__(16);
+	var GeoJsonUtils = __webpack_require__(8);
+	var GeometryUtils = __webpack_require__(5);
 
 	/**
 	 * A simple data provider synchronously indexing the given data using an RTree
@@ -1841,6 +1860,9 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	    /**
 	     * Loads and returns indexed data contained in the specified bounding box.
+	     * 
+	     * @param options.bbox
+	     *            a bounding box used to search data
 	     */
 	    loadData: function loadData(options, callback) {
 	        var that = this;
@@ -1858,9 +1880,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	        function index(d) {
 	            var bbox = that._getBoundingBox(d);
 	            if (bbox) {
-	                var coords = that._toIndexKey(bbox);
-	                coords.data = d;
-	                array.push(coords);
+	                var key = that._toIndexKey(bbox);
+	                key.data = d;
+	                array.push(key);
 	            }
 	        }
 	        if (typeof data === 'function') {
@@ -1884,7 +1906,29 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var result = [];
 	        for (var i = 0; i < array.length; i++) {
 	            var arr = array[i];
-	            result.push(arr.data);
+	            var r = arr.data;
+	            var geometry = this.getGeometry(r);
+	            var handled = false;
+	            GeoJsonUtils.forEachGeometry(geometry, {
+	                onPoints: function onPoints(points) {
+	                    if (!handled && GeometryUtils.bboxContainsPoints(points, bbox)) {
+	                        result.push(r);
+	                        handled = true;
+	                    }
+	                },
+	                onLines: function onLines(lines) {
+	                    if (!handled && GeometryUtils.bboxIntersectsLines(lines, bbox)) {
+	                        result.push(r);
+	                        handled = true;
+	                    }
+	                },
+	                onPolygons: function onPolygons(polygons) {
+	                    if (!handled && GeometryUtils.bboxIntersectsPolygons(polygons, bbox)) {
+	                        result.push(r);
+	                        handled = true;
+	                    }
+	                }
+	            });
 	        }
 	        return result;
 	    },
@@ -1915,10 +1959,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * This method transforms a bounding box into a key for RTree index.
 	     */
 	    _toIndexKey: function _toIndexKey(bbox) {
-	        bbox = bbox.map(function (v) {
-	            return +v;
-	        });
-	        return bbox;
+	        return [+bbox[0][0], +bbox[0][1], +bbox[1][0], +bbox[1][1]];
 	    },
 
 	    /**
@@ -1927,14 +1968,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	     */
 	    _getBoundingBox: function _getBoundingBox(r) {
 	        var geometry = this.getGeometry(r);
-	        var extent = [Infinity, Infinity, -Infinity, -Infinity];
-	        forEachCoordinate(geometry, function (coord) {
-	            if (extent[0] > coord[0]) extent[0] = coord[0];
-	            if (extent[1] > coord[1]) extent[1] = coord[1];
-	            if (extent[2] < coord[0]) extent[2] = coord[0];
-	            if (extent[3] < coord[1]) extent[3] = coord[1];
-	        });
-	        return extent;
+	        return GeoJsonUtils.getBoundingBox(geometry);
 	    },
 
 	    getGeometry: function getGeometry(r) {
@@ -2574,29 +2608,6 @@ return /******/ (function(modules) { // webpackBootstrap
 
 /***/ },
 /* 16 */
-/***/ function(module, exports) {
-
-	'use strict';
-
-	module.exports = function forEach(geometry, callback) {
-	    var j, k, l;
-	    var coords = geometry.coordinates;
-	    if (geometry.type === 'Point') {
-	        callback(coords);
-	    } else if (geometry.type === 'LineString' || geometry.type === 'MultiPoint') {
-	        for (j = 0; j < coords.length; j++) callback(coords[j]);
-	    } else if (geometry.type === 'Polygon' || geometry.type === 'MultiLineString') {
-	        var wrapShrink = geometry.type === 'Polygon' ? 1 : 0;
-	        for (j = 0; j < coords.length; j++) for (k = 0; k < coords[j].length - wrapShrink; k++) callback(coords[j][k]);
-	    } else if (geometry.type === 'MultiPolygon') {
-	        for (j = 0; j < coords.length; j++) for (k = 0; k < coords[j].length; k++) for (l = 0; l < coords[j][k].length - 1; l++) callback(coords[j][k][l]);
-	    } else {
-	        throw new Error('Unknown Geometry Type');
-	    }
-	};
-
-/***/ },
-/* 17 */
 /***/ function(module, exports) {
 
 	/**
