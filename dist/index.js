@@ -58,16 +58,20 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	var L = __webpack_require__(1);
 	L.DataLayer = __webpack_require__(2);
-	L.DataLayer.DataLayerStyle = __webpack_require__(9);
+	L.DataLayer.DataLayerStyle = __webpack_require__(10);
+	L.DataLayer.DataLayerTracker = __webpack_require__(9);
 	L.DataLayer.CanvasContext = __webpack_require__(3);
 	L.DataLayer.GeometryRenderer = __webpack_require__(7);
-	L.DataLayer.GeometryRendererStyle = __webpack_require__(10);
-	L.DataLayer.ImageGridIndex = __webpack_require__(11);
-	L.DataLayer.ImageUtils = __webpack_require__(13);
-	L.DataLayer.DataProvider = __webpack_require__(14);
+	L.DataLayer.GeometryRendererStyle = __webpack_require__(11);
+
+	L.DataLayer.IDataProvider = __webpack_require__(12);
+	L.DataLayer.DataProvider = __webpack_require__(13);
+
 	L.DataLayer.GeoJsonUtils = __webpack_require__(8);
-	L.DataLayer.GridIndex = __webpack_require__(12);
-	L.DataLayer.IDataProvider = __webpack_require__(16);
+	L.DataLayer.GridIndex = __webpack_require__(15);
+	L.DataLayer.ImageGridIndex = __webpack_require__(16);
+	L.DataLayer.ImageUtils = __webpack_require__(17);
+
 	module.exports = L.DataLayer;
 
 /***/ },
@@ -87,6 +91,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	var GeometryRenderer = __webpack_require__(7);
 	var GeoJsonUtils = __webpack_require__(8);
 	var GeometryUtils = __webpack_require__(5);
+	var DataLayerTracker = __webpack_require__(9);
 
 	/**
 	 * This layer draws data on canvas tiles.
@@ -100,11 +105,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	    initialize: function initialize(options) {
 	        ParentLayer.prototype.initialize.apply(this, arguments);
 	        this._newCanvas = this._newCanvas.bind(this);
-	        this._getImageMaskIndex = this._getImageMaskIndex.bind(this);
+	        this._tracker = this.options.tracker;
+	        if (!this._tracker && !this.options.noTracker) {
+	            this._tracker = new DataLayerTracker(options);
+	        }
+	        if (this._tracker) {
+	            this._tracker.setDataLayer(this);
+	        }
 	    },
 
 	    onAdd: function onAdd(map) {
 	        ParentLayer.prototype.onAdd.apply(this, arguments);
+	        if (this._tracker) {
+	            map.addLayer(this._tracker);
+	        }
 	        this._map.on('mousemove', this._onMouseMove, this);
 	        this._map.on('click', this._onClick, this);
 	        this._map.on('zoomstart', this._onZoomStart, this);
@@ -116,6 +130,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this._map.off('zoomstart', this._onZoomStart, this);
 	        this._map.off('click', this._onClick, this);
 	        this._map.off('mousemove', this._onMouseMove, this);
+	        if (this._tracker) {
+	            map.removeLayer(this._tracker);
+	        }
 	        ParentLayer.prototype.onRemove.apply(this, arguments);
 	    },
 
@@ -151,26 +168,22 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var bbox = this._getTileBbox(tilePoint);
 	        var origin = [bbox[0][0], bbox[1][1]];
 
-	        var pad = this._getTilePad(tilePoint);
+	        var pad = this._getTilePad();
 	        var extendedBbox = this.expandBbox(bbox, pad);
 
 	        var size = Math.min(tileSize.x, tileSize.y);
-	        var scale = GeometryRenderer.calculateScale(tilePoint.z, size);
-	        var style = this._getStyleProvider();
 
 	        var resolution = this.options.resolution || 4;
 	        var context = new CanvasContext({
 	            canvas: canvas,
 	            newCanvas: this._newCanvas,
-	            resolution: resolution,
-	            imageMaskIndex: this._getImageMaskIndex
+	            resolution: resolution
 	        });
 	        var map = this._map;
 	        var provider = this._getDataProvider();
 	        var renderer = new GeometryRenderer({
 	            context: context,
 	            tileSize: tileSize,
-	            scale: scale,
 	            origin: origin,
 	            bbox: extendedBbox,
 	            getGeometry: provider.getGeometry.bind(provider),
@@ -192,20 +205,26 @@ return /******/ (function(modules) { // webpackBootstrap
 	        tile.context = context;
 	        tile.renderer = renderer;
 
+	        var styles = this._getDataStyles();
 	        this.loadData(extendedBbox, (function (err, data) {
 	            if (!err && data && data.length) {
 	                var drawOptions = {
 	                    tilePoint: tilePoint,
 	                    map: this._map
 	                };
-	                if (typeof data.forEach === 'function') {
-	                    data.forEach(function (d, i) {
-	                        renderer.drawFeature(d, style, drawOptions);
-	                    });
-	                } else if (data.length) {
+	                var forEach = typeof data.forEach === 'function' ? //
+	                data.forEach.bind(data) //
+	                : function (f) {
 	                    for (var i = 0; i < data.length; i++) {
-	                        renderer.drawFeature(data[i], style, drawOptions);
+	                        f(data[i], i);
 	                    }
+	                };
+	                for (var i = 0; i < styles.length; i++) {
+	                    (function (style) {
+	                        forEach(function (d, i) {
+	                            renderer.drawFeature(d, style, drawOptions);
+	                        });
+	                    })(styles[i]);
 	                }
 	            }
 	        }).bind(this));
@@ -287,13 +306,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    /** Returns the pad (in pixels) around a tile */
-	    _getTilePad: function _getTilePad(tilePoint) {
-	        var tilePad = this.options.tilePad;
-	        if (typeof tilePad === 'function') {
-	            tilePad = this.options.tilePad({
-	                tilePoint: tilePoint
-	            });
-	        }
+	    _getTilePad: function _getTilePad() {
+	        var style = this._getDataStyle();
+	        var zoom = this._map.getZoom();
+	        var tilePad = style.getTilePad(zoom);
 	        return tilePad;
 	    },
 
@@ -303,8 +319,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	        return this.options.provider;
 	    },
 
-	    _getStyleProvider: function _getStyleProvider() {
-	        return this.options.style;
+	    _getDataStyles: function _getDataStyles() {
+	        var styles = this.options.styles || [this.options.style];
+	        return styles;
+	    },
+
+	    _getDataStyle: function _getDataStyle() {
+	        var styles = this._getDataStyles();
+	        return styles[0];
 	    },
 
 	    // -----------------------------------------------------------------------
@@ -313,18 +335,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	        canvas.width = w;
 	        canvas.height = h;
 	        return canvas;
-	    },
-
-	    _getImageMaskIndex: function _getImageMaskIndex(image, options) {
-	        var index = this.options.imageIndex;
-	        if (typeof index === 'function') {
-	            this._getImageMaskIndex = index.bind(this);
-	        } else {
-	            this._getImageMaskIndex = (function () {
-	                return index;
-	            }).bind(this);
-	        }
-	        return this._getImageMaskIndex(image, options);
 	    },
 
 	    // -----------------------------------------------------------------------
@@ -385,16 +395,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	    loadDataAround: function loadDataAround(latlng, radiusInPixels, callback) {
 	        var bbox = this.pixelsToBbox(latlng, radiusInPixels);
-	        return this.loadData(bbox, function (err, list) {
-	            if (err) {
-	                return callback(err);
-	            } else {
-	                // TODO: add data filtering; return only geometries
-	                // intersecting with the bbox.
-	                // list = filter(list);
-	                return callback(null, list);
-	            }
-	        });
+	        return this.loadData(bbox, callback);
 	    },
 
 	    openPopup: function openPopup(latlng) {
@@ -518,8 +519,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	     */
 	    drawImage: function drawImage(image, position, options) {
 	        this._drawOnCanvasContext(options, function (g) {
-	            g.globalCompositeOperation = 'source-over';
-	            g.globalAlpha = 1;
+	            this._setCanvasStyles(g, options);
 	            g.drawImage(image, position[0], position[1]);
 	            return true;
 	        });
@@ -610,7 +610,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	     */
 	    _setCanvasStyles: function _setCanvasStyles(g, options) {
 	        if (!options) return;
-	        g.globalAlpha = options.globalAlpha || options.fillOpacity || options.lineOpacity || options.opacity || 0;
+	        g.globalAlpha = options.globalAlpha || options.fillOpacity || options.lineOpacity || options.opacity || 1;
 	        g.fillStyle = options.fillColor || options.color;
 	        if (options.fillImage) {
 	            g.fillStyle = g.createPattern(options.fillImage, "repeat");
@@ -619,6 +619,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	        g.lineWidth = options.lineWidth || options.width || 0;
 	        g.lineCap = options.lineCap || 'round'; // 'butt|round|square'
 	        g.lineJoin = options.lineJoin || 'round'; // 'miter|round|bevel'
+
+	        var compositeOperation = options.compositeOperation || options.composition || 'source-over';
+	        g.globalCompositeOperation = compositeOperation; //
 	    },
 
 	    // -----------------------------------------------------------------------
@@ -1348,51 +1351,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * Returns an array of projected points.
 	     */
 	    _getProjectedPoints: function _getProjectedPoints(coordinates) {
-	        // if (typeof this.options.project === 'function') {
-	        this._getProjectedPoints = function (coordinates) {
-	            return this.options.project(coordinates);
-	        };
-	        return this._getProjectedPoints(coordinates);
-	        // }
-	        // // FIXME: projected points calculation do not work as
-	        // expected
-	        // var t = this.getTransformation();
-	        // var s = this.getScale();
-	        // var origin = this.getOrigin();
-	        // var o = t.direct(origin[0], origin[1], s);
-	        // var result = [];
-	        // for (var i = 0; i < coordinates.length; i++) {
-	        // var p = coordinates[i];
-	        // var point = t.direct(p[0], p[1], s);
-	        // point[0] = Math.round(point[0] - o[0]);
-	        // point[1] = Math.round(point[1] - o[1]);
-	        // result.push(point);
-	        // }
-	        // return result;
+	        return this.options.project(coordinates);
 	    },
-
-	    // getTransformation : function() {
-	    // if (!this._transformation) {
-	    // this._transformation = this.options.transformation
-	    // || transform(1 / 180, 0, -1 / 90, 0);
-	    // function transform(a, b, c, d) {
-	    // return {
-	    // direct : function(x, y, scale) {
-	    // return [ scale * (x * a + b), scale * (y * c + d) ];
-	    // },
-	    // inverse : function(x, y, scale) {
-	    // return [ (x / scale - b) / a, (y / scale - d) / c ];
-	    // }
-	    // };
-	    // }
-	    // }
-	    // return this._transformation;
-	    // },
-	    //
-	    // /** Returns the current scale */
-	    // getScale : function() {
-	    // return this.options.scale || 1;
-	    // },
 
 	    /** Returns the initial shift */
 	    getOrigin: function getOrigin() {
@@ -1400,17 +1360,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	    }
 
 	});
-
-	// defines how the world scales with zoom
-	GeometryRenderer.calculateScale = function (zoom, tileSize) {
-	    tileSize = tileSize || 256;
-	    return tileSize * Math.pow(2, zoom);
-	};
-
-	GeometryRenderer.calculateZoom = function (scale, tileSize) {
-	    tileSize = tileSize || 256;
-	    return Math.log(scale / tileSize) / Math.LN2;
-	};
 
 	module.exports = GeometryRenderer;
 
@@ -1506,10 +1455,193 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	'use strict';
 
-	module.exports = __webpack_require__(10);
+	var L = __webpack_require__(1);
+
+	var DataLayerTracker = L.Layer.extend({
+	    options: {
+	        pane: 'markerPane'
+	    },
+
+	    // interactive: false,
+	    // riseOnHover: true,
+	    // riseOffset: 250
+	    initialize: function initialize(options) {
+	        L.setOptions(this, options);
+	        var timeout = 50;
+	        this._refreshData = L.Util.throttle(this._refreshData, timeout, this);
+	    },
+
+	    setDataLayer: function setDataLayer(layer) {
+	        this._dataLayer = layer;
+	    },
+
+	    onAdd: function onAdd(map) {
+	        this._map = map;
+	        this._initIcon();
+	        this._map.on('mousemove', this._onMouseMove, this);
+	        this._dataLayer.on('mouseenter', this._onMouseEnter, this);
+	        this._dataLayer.on('mouseleave', this._onMouseLeave, this);
+	    },
+
+	    onRemove: function onRemove(map) {
+	        this._map.off('mousemove', this._onMouseMove, this);
+	        this._dataLayer.off('mouseenter', this._onMouseEnter, this);
+	        this._dataLayer.off('mouseleave', this._onMouseLeave, this);
+	        this._removeIcon();
+	        delete this._map;
+	    },
+
+	    // -----------------------------------------------------------------------
+
+	    _onMouseMove: function _onMouseMove(ev) {
+	        this._setLatLng(ev.latlng);
+	        this._refreshData();
+	        this._refreshIcon();
+	    },
+
+	    _onMouseEnter: function _onMouseEnter(ev) {
+	        this._show = true;
+	        this._element.style.display = 'block';
+	    },
+
+	    _onMouseLeave: function _onMouseLeave(ev) {
+	        this._show = false;
+	        this._element.style.display = 'none';
+	    },
+
+	    // -----------------------------------------------------------------------
+
+	    _refreshData: function _refreshData() {
+	        if (!this._show || !this._latlng) return;
+	        var radius = this._getRadius();
+	        var that = this;
+	        this._dataLayer.loadDataAround(this._latlng, radius, //
+	        function (err, data) {
+	            that._data = data;
+	            that._renderData();
+	        });
+	    },
+
+	    _renderData: function _renderData() {
+	        var data = this._data;
+	        this._element.innerHTML = '';
+	        var elm = L.DomUtil.create('div', '', this._element);
+	        elm.innerHTML = data.length + '';
+	        var style = this._getTooltipStyle();
+	        L.Util.extend(elm.style, style);
+	    },
+
+	    _refreshIcon: function _refreshIcon() {
+	        var elm = this._element;
+	        if (!this._show) {
+	            return;
+	        }
+	        var style = this._getBorderStyle();
+	        L.Util.extend(elm.style, style);
+	    },
+
+	    // -----------------------------------------------------------------------
+
+	    getLatLng: function getLatLng() {
+	        return this._latlng;
+	    },
+
+	    _setLatLng: function _setLatLng(latlng) {
+	        if (!latlng) return;
+	        var oldLatLng = this._latlng;
+	        this._latlng = L.latLng(latlng);
+
+	        if (this._element && this._map) {
+	            var pos = this._map.latLngToLayerPoint(this._latlng).round();
+	            L.DomUtil.setPosition(this._element, pos);
+	        }
+
+	        return this.fire('move', {
+	            oldLatLng: oldLatLng,
+	            latlng: this._latlng,
+	            target: this
+	        });
+	    },
+
+	    getElement: function getElement() {
+	        return this._element;
+	    },
+
+	    _getRadius: function _getRadius() {
+	        if (!this._r) {
+	            var r = typeof this.options.radius === 'function' ? //
+	            this.options.radius //
+	            : function (zoom) {
+	                return this.options.radius || 40;
+	            };
+	            this._r = r.bind(this);
+	        }
+	        var zoom = this._map.getZoom();
+	        return this._r(zoom);
+	    },
+
+	    _getTooltipStyle: function _getTooltipStyle() {
+	        var color = this.options.trackerColor || 'gray';
+	        return {
+	            position: 'absolute',
+	            backgroundColor: 'white',
+	            top: '-1em',
+	            left: '100%',
+	            padding: '0.1em 0.5em',
+	            border: '1px solid ' + color,
+	            borderRadius: '0.8em',
+	            borderBottomLeftRadius: '0'
+	        };
+	    },
+
+	    _getBorderStyle: function _getBorderStyle() {
+	        var r = this._getRadius();
+	        var color = this.options.trackerColor || 'rgba(255, 255, 255, .5)';
+	        return {
+	            border: '5px solid ' + color,
+	            borderRadius: r + 'px',
+	            height: r + 'px',
+	            width: r + 'px',
+	            background: 'none',
+	            marginLeft: -(r / 2) + 'px',
+	            marginTop: -(r / 2) + 'px'
+	        };
+	    },
+
+	    _getPane: function _getPane() {
+	        return this._map.getPane(this.options.pane);
+	    },
+
+	    _initIcon: function _initIcon() {
+	        if (!this._element) {
+	            var className = '';
+	            var container = this._getPane();
+	            this._element = L.DomUtil.create('div', className, container);
+	        }
+	        this._element.style.display = 'none';
+	        return this._element;
+	    },
+
+	    _removeIcon: function _removeIcon() {
+	        if (this._element) {
+	            L.DomUtil.remove(this._element);
+	            delete this._element;
+	        }
+	    }
+
+	});
+	module.exports = DataLayerTracker;
 
 /***/ },
 /* 10 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	module.exports = __webpack_require__(11);
+
+/***/ },
+/* 11 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -1570,307 +1702,40 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = GeometryRenderStyle;
 
 /***/ },
-/* 11 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var GridIndex = __webpack_require__(12);
-	var extend = __webpack_require__(4);
-
-	function ImageGridIndex() {
-	    GridIndex.apply(this, arguments);
-	}
-	extend(ImageGridIndex.prototype, GridIndex.prototype, {
-
-	    /**
-	     * Adds all pixels occupied by the specified image to a data mask associated
-	     * with canvas.
-	     */
-	    indexImage: function indexImage(image, x, y, options) {
-	        var result = false;
-	        var data = options.data;
-	        if (!data) return result;
-	        var mask = this._getImageMask(image, options);
-	        var imageMaskWidth = this._getMaskX(image.width);
-	        var maskShiftX = this._getMaskX(x);
-	        var maskShiftY = this._getMaskY(y);
-	        for (var i = 0; i < mask.length; i++) {
-	            if (!mask[i]) continue;
-	            var maskX = maskShiftX + i % imageMaskWidth;
-	            var maskY = maskShiftY + Math.floor(i / imageMaskWidth);
-	            var key = this._getIndexKey(maskX, maskY);
-	            this._addDataToIndex(key, options);
-	            result = true;
-	        }
-	        return result;
-	    },
-
-	    // -------------------------------------------------------------------------
-
-	    /**
-	     * Returns a unique key of the specified image. If this method returns
-	     * <code>null</code> then the image mask is not stored in the internal
-	     * mask cache. To allow to store the image mask in cache the image should be
-	     * 'stampted' with a new identifier using the ImageGridIndex.stampImage
-	     * method..
-	     */
-	    stampImage: function stampImage(image) {
-	        return ImageGridIndex.stampImage(image);
-	    },
-
-	    // -------------------------------------------------------------------------
-
-	    /**
-	     * Returns a mask corresponding to the specified image.
-	     */
-	    _getImageMask: function _getImageMask(image, options) {
-	        var imageKey = this.stampImage(image);
-	        var maskIndex = this._getImageMaskIndex(image, options);
-	        if (!maskIndex || !imageKey) {
-	            return this._buildImageMask(image, options);
-	        }
-	        var mask = maskIndex[imageKey];
-	        if (!mask) {
-	            mask = this._buildImageMask(image, options);
-	            maskIndex[imageKey] = mask;
-	        }
-	        return mask;
-	    },
-
-	    /**
-	     * This method maintain an index of image masks associated with the provided
-	     * canvas. This method could be overloaded to implement a global index of
-	     * image masks.
-	     */
-	    _getImageMaskIndex: function _getImageMaskIndex(image, options) {
-	        var index = options.imageMaskIndex || this.options.imageMaskIndex;
-	        if (!index) return;
-	        if (typeof index === 'function') {
-	            index = index(image, options);
-	        }
-	        return index;
-	    },
-
-	    /** Creates and returns an image mask. */
-	    _buildImageMask: function _buildImageMask(image) {
-	        var maskWidth = this._getMaskX(image.width);
-	        var maskHeight = this._getMaskY(image.height);
-	        var buf = this._getResizedImageBuffer(image, maskWidth, maskHeight);
-	        var mask = new Array(maskWidth * maskHeight);
-	        for (var y = 0; y < maskHeight; y++) {
-	            for (var x = 0; x < maskWidth; x++) {
-	                var idx = y * maskWidth + x;
-	                var filled = this._checkFilledPixel(buf, idx);
-	                mask[idx] = filled ? 1 : 0;
-	            }
-	        }
-	        return mask;
-	    },
-
-	    /**
-	     * Returns <code>true</code> if the specified pixel is not transparent
-	     */
-	    _checkFilledPixel: function _checkFilledPixel(buf, pos) {
-	        // Check that the alpha channel is not 0 which means that this
-	        // pixel is not transparent and it should not be associated with data.
-	        // 4 bytes per pixel; RGBA - forth byte is an alpha channel.
-	        var idx = pos * 4 + 3;
-	        return !!buf[idx];
-	    },
-
-	    /** Returns a raw data for the resized image. */
-	    _getResizedImageBuffer: function _getResizedImageBuffer(image, width, height) {
-	        var g;
-	        if (image.tagName === 'CANVAS' && image.width === width && image.height === height) {
-	            g = image.getContext('2d');
-	        } else {
-	            var canvas = this._newCanvas(width, height);
-	            canvas.width = width;
-	            canvas.height = height;
-	            g = canvas.getContext('2d');
-	            g.drawImage(image, 0, 0, width, height);
-	        }
-	        var data = g.getImageData(0, 0, width, height).data;
-	        return data;
-	    },
-
-	    _newCanvas: function _newCanvas(width, height) {
-	        var canvas;
-	        if (this.options.newCanvas) {
-	            canvas = this.options.newCanvas(width, height);
-	        } else {
-	            canvas = document.createElement('canvas');
-	            canvas.width = width;
-	            canvas.height = height;
-	        }
-	        return canvas;
-	    }
-
-	});
-
-	ImageGridIndex.stampImage = function (image) {
-	    var key = image['image-id'];
-	    if (!key) {
-	        var that = ImageGridIndex;
-	        that._imageIdCounter = (that._imageIdCounter || 0) + 1;
-	        key = image['image-id'] = 'i' + that._imageIdCounter;
-	    }
-	    return key;
-	};
-	module.exports = ImageGridIndex;
-
-/***/ },
 /* 12 */
 /***/ function(module, exports) {
 
+	/**
+	 * A simple data provider synchronously indexing the given data using an RTree
+	 * index.
+	 */
 	'use strict';
 
-	function GridIndex() {
-	    this.initialize.apply(this, arguments);
-	}
-
-	GridIndex.prototype = {
-
-	    initialize: function initialize(options) {
-	        this.options = options || {};
-	        var resolution = this.options.resolution || 4;
-	        this.options.resolutionX = this.options.resolutionX || resolution;
-	        this.options.resolutionY = this.options.resolutionY || //
-	        this.options.resolutionX || resolution;
-	        this.reset();
-	    },
-
-	    /**
-	     * Returns data associated with the specified position on the canvas.
-	     */
-	    getData: function getData(x, y) {
-	        var array = this.getAllData(x, y);
-	        return array && array.length ? array[0] : undefined;
-	    },
-
-	    /**
-	     * Returns all data objects associated with the specified position on the
-	     * canvas.
-	     */
-	    getAllData: function getAllData(x, y) {
-	        var maskX = this._getMaskX(x);
-	        var maskY = this._getMaskY(y);
-	        var key = this._getIndexKey(maskX, maskY);
-	        return this._dataIndex[key];
-	    },
-
-	    /**
-	     * Sets data in the specified position on the canvas.
-	     * 
-	     * @param x
-	     * @param y
-	     * @param options.data
-	     *            a data object to set
-	     */
-	    addData: function addData(x, y, options) {
-	        var maskX = this._getMaskX(x);
-	        var maskY = this._getMaskY(y);
-	        var key = this._getIndexKey(maskX, maskY);
-	        return this._addDataToIndex(key, options);
-	    },
-
-	    reset: function reset() {
-	        this._dataIndex = {};
-	    },
-
-	    /**
-	     * Transforms a X coordinate on canvas to X coordinate in the mask.
-	     */
-	    _getMaskX: function _getMaskX(x) {
-	        var resolutionX = this.options.resolutionX;
-	        return Math.round(x / resolutionX);
-	    },
-
-	    /**
-	     * Transforms Y coordinate on canvas to Y coordinate in the mask.
-	     */
-	    _getMaskY: function _getMaskY(y) {
-	        var resolutionY = this.options.resolutionY;
-	        return Math.round(y / resolutionY);
-	    },
-
-	    /**
-	     * Adds data to the specified canvas position.
-	     * 
-	     * @param key
-	     * @param data
-	     * @param replace
-	     * @returns
-	     */
-	    _addDataToIndex: function _addDataToIndex(key, options) {
-	        var data = options.data;
-	        if (data === undefined) return;
-	        var array = this._dataIndex[key];
-	        if (!array || options.replace) {
-	            array = this._dataIndex[key] = [];
-	        }
-	        array.unshift(data);
-	        array.count = (array.count || 0) + 1;
-	        while (array.length && array.length > (this.options.maxCellCapacity || 1)) {
-	            array.pop();
-	        }
-	    },
-
-	    _getIndexKey: function _getIndexKey(maskX, maskY) {
-	        return maskX + ':' + maskY;
+	function IDataProvider() {
+	    if (typeof this.options.getGeometry === 'function') {
+	        this.getGeometry = this.options.getGeometry;
 	    }
+	    this.options = options || {};
+	}
+	/**
+	 * Loads and returns indexed data contained in the specified bounding box.
+	 */
+	IDataProvider.prototype.loadData = function (options, callback) {
+	    callback(null, this.options.data || []);
+	};
+	IDataProvider.prototype.getGeometry = function (r) {
+	    return r.geometry;
 	};
 
-	module.exports = GridIndex;
+	module.exports = IDataProvider;
 
 /***/ },
 /* 13 */
-/***/ function(module, exports) {
-
-	"use strict";
-
-	module.exports = {
-
-	    /**
-	     * Draws a simple marker on the specified canvas 2d context.
-	     */
-	    drawMarker: function drawMarker(g, x, y, width, height, radius) {
-	        g.beginPath();
-	        // a
-	        g.moveTo(x + width / 2, y);
-	        // b
-	        g.bezierCurveTo( //
-	        x + width / 2 + radius / 2, y, //
-	        x + width / 2 + radius, y + radius / 2, //
-	        x + width / 2 + radius, y + radius);
-	        // c
-	        g.bezierCurveTo( //
-	        x + width / 2 + radius, y + radius * 2, //
-	        x + width / 2, y + height / 2 + radius / 3, //
-	        x + width / 2, y + height);
-	        // d
-	        g.bezierCurveTo( //
-	        x + width / 2, y + height / 2 + radius / 3, //
-	        x + width / 2 - radius, y + radius * 2, //
-	        x + width / 2 - radius, y + radius);
-	        // e (a)
-	        g.bezierCurveTo( //
-	        x + width / 2 - radius, y + radius / 2, //
-	        x + width / 2 - radius / 2, y + 0, //
-	        x + width / 2, y + 0);
-	        g.closePath();
-	    }
-
-	};
-
-/***/ },
-/* 14 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var rbush = __webpack_require__(15);
+	var rbush = __webpack_require__(14);
 	var GeoJsonUtils = __webpack_require__(8);
 	var GeometryUtils = __webpack_require__(5);
 
@@ -1943,6 +1808,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var array = this._rtree.search(coords);
 	        array = this._sortByDistance(array, bbox);
 	        var result = [];
+	        var filterMultiPoints = !!this.options.filterPoints;
 	        for (var i = 0; i < array.length; i++) {
 	            var arr = array[i];
 	            var r = arr.data;
@@ -1950,7 +1816,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            var handled = false;
 	            GeoJsonUtils.forEachGeometry(geometry, {
 	                onPoints: function onPoints(points) {
-	                    if (!handled && GeometryUtils.bboxContainsPoints(points, bbox)) {
+	                    if (!handled && (!filterMultiPoints || GeometryUtils.bboxContainsPoints(points, bbox))) {
 	                        result.push(r);
 	                        handled = true;
 	                    }
@@ -2019,7 +1885,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = DataProvider;
 
 /***/ },
-/* 15 */
+/* 14 */
 /***/ function(module, exports, __webpack_require__) {
 
 	var __WEBPACK_AMD_DEFINE_RESULT__;/*
@@ -2646,32 +2512,299 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 16 */
+/* 15 */
 /***/ function(module, exports) {
 
-	/**
-	 * A simple data provider synchronously indexing the given data using an RTree
-	 * index.
-	 */
 	'use strict';
 
-	function IDataProvider() {
-	    if (typeof this.options.getGeometry === 'function') {
-	        this.getGeometry = this.options.getGeometry;
-	    }
-	    this.options = options || {};
+	function GridIndex() {
+	    this.initialize.apply(this, arguments);
 	}
-	/**
-	 * Loads and returns indexed data contained in the specified bounding box.
-	 */
-	IDataProvider.prototype.loadData = function (options, callback) {
-	    callback(null, this.options.data || []);
-	};
-	IDataProvider.prototype.getGeometry = function (r) {
-	    return r.geometry;
+
+	GridIndex.prototype = {
+
+	    initialize: function initialize(options) {
+	        this.options = options || {};
+	        var resolution = this.options.resolution || 4;
+	        this.options.resolutionX = this.options.resolutionX || resolution;
+	        this.options.resolutionY = this.options.resolutionY || //
+	        this.options.resolutionX || resolution;
+	        this.reset();
+	    },
+
+	    /**
+	     * Returns data associated with the specified position on the canvas.
+	     */
+	    getData: function getData(x, y) {
+	        var array = this.getAllData(x, y);
+	        return array && array.length ? array[0] : undefined;
+	    },
+
+	    /**
+	     * Returns all data objects associated with the specified position on the
+	     * canvas.
+	     */
+	    getAllData: function getAllData(x, y) {
+	        var maskX = this._getMaskX(x);
+	        var maskY = this._getMaskY(y);
+	        var key = this._getIndexKey(maskX, maskY);
+	        return this._dataIndex[key];
+	    },
+
+	    /**
+	     * Sets data in the specified position on the canvas.
+	     * 
+	     * @param x
+	     * @param y
+	     * @param options.data
+	     *            a data object to set
+	     */
+	    addData: function addData(x, y, options) {
+	        var maskX = this._getMaskX(x);
+	        var maskY = this._getMaskY(y);
+	        var key = this._getIndexKey(maskX, maskY);
+	        return this._addDataToIndex(key, options);
+	    },
+
+	    reset: function reset() {
+	        this._dataIndex = {};
+	    },
+
+	    /**
+	     * Transforms a X coordinate on canvas to X coordinate in the mask.
+	     */
+	    _getMaskX: function _getMaskX(x) {
+	        var resolutionX = this.options.resolutionX;
+	        return Math.round(x / resolutionX);
+	    },
+
+	    /**
+	     * Transforms Y coordinate on canvas to Y coordinate in the mask.
+	     */
+	    _getMaskY: function _getMaskY(y) {
+	        var resolutionY = this.options.resolutionY;
+	        return Math.round(y / resolutionY);
+	    },
+
+	    /**
+	     * Adds data to the specified canvas position.
+	     * 
+	     * @param key
+	     * @param data
+	     * @param replace
+	     * @returns
+	     */
+	    _addDataToIndex: function _addDataToIndex(key, options) {
+	        var data = options.data;
+	        if (data === undefined) return;
+	        var array = this._dataIndex[key];
+	        if (!array || options.replace) {
+	            array = this._dataIndex[key] = [];
+	        }
+	        array.unshift(data);
+	        array.count = (array.count || 0) + 1;
+	        while (array.length && array.length > (this.options.maxCellCapacity || 1)) {
+	            array.pop();
+	        }
+	    },
+
+	    _getIndexKey: function _getIndexKey(maskX, maskY) {
+	        return maskX + ':' + maskY;
+	    }
 	};
 
-	module.exports = IDataProvider;
+	module.exports = GridIndex;
+
+/***/ },
+/* 16 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	var GridIndex = __webpack_require__(15);
+	var extend = __webpack_require__(4);
+
+	function ImageGridIndex() {
+	    GridIndex.apply(this, arguments);
+	}
+	extend(ImageGridIndex.prototype, GridIndex.prototype, {
+
+	    /**
+	     * Adds all pixels occupied by the specified image to a data mask associated
+	     * with canvas.
+	     */
+	    indexImage: function indexImage(image, x, y, options) {
+	        var result = false;
+	        var data = options.data;
+	        if (!data) return result;
+	        var mask = this._getImageMask(image, options);
+	        var imageMaskWidth = this._getMaskX(image.width);
+	        var maskShiftX = this._getMaskX(x);
+	        var maskShiftY = this._getMaskY(y);
+	        for (var i = 0; i < mask.length; i++) {
+	            if (!mask[i]) continue;
+	            var maskX = maskShiftX + i % imageMaskWidth;
+	            var maskY = maskShiftY + Math.floor(i / imageMaskWidth);
+	            var key = this._getIndexKey(maskX, maskY);
+	            this._addDataToIndex(key, options);
+	            result = true;
+	        }
+	        return result;
+	    },
+
+	    // -------------------------------------------------------------------------
+
+	    /**
+	     * Returns a unique key of the specified image. If this method returns
+	     * <code>null</code> then the image mask is not stored in the internal
+	     * mask cache. To allow to store the image mask in cache the image should be
+	     * 'stampted' with a new identifier using the ImageGridIndex.stampImage
+	     * method..
+	     */
+	    stampImage: function stampImage(image) {
+	        return ImageGridIndex.stampImage(image);
+	    },
+
+	    // -------------------------------------------------------------------------
+
+	    /**
+	     * Returns a mask corresponding to the specified image.
+	     */
+	    _getImageMask: function _getImageMask(image, options) {
+	        var imageKey = this.stampImage(image);
+	        var maskIndex = this._getImageMaskIndex(image, options);
+	        if (!maskIndex || !imageKey) {
+	            return this._buildImageMask(image, options);
+	        }
+	        var mask = maskIndex[imageKey];
+	        if (!mask) {
+	            mask = this._buildImageMask(image, options);
+	            maskIndex[imageKey] = mask;
+	        }
+	        return mask;
+	    },
+
+	    /**
+	     * This method maintain an index of image masks associated with the provided
+	     * canvas. This method could be overloaded to implement a global index of
+	     * image masks.
+	     */
+	    _getImageMaskIndex: function _getImageMaskIndex(image, options) {
+	        var index = options.imageMaskIndex || this.options.imageMaskIndex;
+	        if (!index) return;
+	        if (typeof index === 'function') {
+	            index = index(image, options);
+	        }
+	        return index;
+	    },
+
+	    /** Creates and returns an image mask. */
+	    _buildImageMask: function _buildImageMask(image) {
+	        var maskWidth = this._getMaskX(image.width);
+	        var maskHeight = this._getMaskY(image.height);
+	        var buf = this._getResizedImageBuffer(image, maskWidth, maskHeight);
+	        var mask = new Array(maskWidth * maskHeight);
+	        for (var y = 0; y < maskHeight; y++) {
+	            for (var x = 0; x < maskWidth; x++) {
+	                var idx = y * maskWidth + x;
+	                var filled = this._checkFilledPixel(buf, idx);
+	                mask[idx] = filled ? 1 : 0;
+	            }
+	        }
+	        return mask;
+	    },
+
+	    /**
+	     * Returns <code>true</code> if the specified pixel is not transparent
+	     */
+	    _checkFilledPixel: function _checkFilledPixel(buf, pos) {
+	        // Check that the alpha channel is not 0 which means that this
+	        // pixel is not transparent and it should not be associated with data.
+	        // 4 bytes per pixel; RGBA - forth byte is an alpha channel.
+	        var idx = pos * 4 + 3;
+	        return !!buf[idx];
+	    },
+
+	    /** Returns a raw data for the resized image. */
+	    _getResizedImageBuffer: function _getResizedImageBuffer(image, width, height) {
+	        var g;
+	        if (image.tagName === 'CANVAS' && image.width === width && image.height === height) {
+	            g = image.getContext('2d');
+	        } else {
+	            var canvas = this._newCanvas(width, height);
+	            canvas.width = width;
+	            canvas.height = height;
+	            g = canvas.getContext('2d');
+	            g.drawImage(image, 0, 0, width, height);
+	        }
+	        var data = g.getImageData(0, 0, width, height).data;
+	        return data;
+	    },
+
+	    _newCanvas: function _newCanvas(width, height) {
+	        var canvas;
+	        if (this.options.newCanvas) {
+	            canvas = this.options.newCanvas(width, height);
+	        } else {
+	            canvas = document.createElement('canvas');
+	            canvas.width = width;
+	            canvas.height = height;
+	        }
+	        return canvas;
+	    }
+
+	});
+
+	ImageGridIndex.stampImage = function (image) {
+	    var key = image['image-id'];
+	    if (!key) {
+	        var that = ImageGridIndex;
+	        that._imageIdCounter = (that._imageIdCounter || 0) + 1;
+	        key = image['image-id'] = 'i' + that._imageIdCounter;
+	    }
+	    return key;
+	};
+	module.exports = ImageGridIndex;
+
+/***/ },
+/* 17 */
+/***/ function(module, exports) {
+
+	"use strict";
+
+	module.exports = {
+
+	    /**
+	     * Draws a simple marker on the specified canvas 2d context.
+	     */
+	    drawMarker: function drawMarker(g, x, y, width, height, radius) {
+	        g.beginPath();
+	        // a
+	        g.moveTo(x + width / 2, y);
+	        // b
+	        g.bezierCurveTo( //
+	        x + width / 2 + radius / 2, y, //
+	        x + width / 2 + radius, y + radius / 2, //
+	        x + width / 2 + radius, y + radius);
+	        // c
+	        g.bezierCurveTo( //
+	        x + width / 2 + radius, y + radius * 2, //
+	        x + width / 2, y + height / 2 + radius / 3, //
+	        x + width / 2, y + height);
+	        // d
+	        g.bezierCurveTo( //
+	        x + width / 2, y + height / 2 + radius / 3, //
+	        x + width / 2 - radius, y + radius * 2, //
+	        x + width / 2 - radius, y + radius);
+	        // e (a)
+	        g.bezierCurveTo( //
+	        x + width / 2 - radius, y + radius / 2, //
+	        x + width / 2 - radius / 2, y + 0, //
+	        x + width / 2, y + 0);
+	        g.closePath();
+	    }
+
+	};
 
 /***/ }
 /******/ ])

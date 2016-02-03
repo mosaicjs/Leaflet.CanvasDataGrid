@@ -167,51 +167,8 @@ extend(GeometryRenderer.prototype, {
      * Returns an array of projected points.
      */
     _getProjectedPoints : function(coordinates) {
-        // if (typeof this.options.project === 'function') {
-        this._getProjectedPoints = function(coordinates) {
-            return this.options.project(coordinates);
-        }
-        return this._getProjectedPoints(coordinates);
-        // }
-        // // FIXME: projected points calculation do not work as
-        // expected
-        // var t = this.getTransformation();
-        // var s = this.getScale();
-        // var origin = this.getOrigin();
-        // var o = t.direct(origin[0], origin[1], s);
-        // var result = [];
-        // for (var i = 0; i < coordinates.length; i++) {
-        // var p = coordinates[i];
-        // var point = t.direct(p[0], p[1], s);
-        // point[0] = Math.round(point[0] - o[0]);
-        // point[1] = Math.round(point[1] - o[1]);
-        // result.push(point);
-        // }
-        // return result;
+        return this.options.project(coordinates);
     },
-
-    // getTransformation : function() {
-    // if (!this._transformation) {
-    // this._transformation = this.options.transformation
-    // || transform(1 / 180, 0, -1 / 90, 0);
-    // function transform(a, b, c, d) {
-    // return {
-    // direct : function(x, y, scale) {
-    // return [ scale * (x * a + b), scale * (y * c + d) ];
-    // },
-    // inverse : function(x, y, scale) {
-    // return [ (x / scale - b) / a, (y / scale - d) / c ];
-    // }
-    // };
-    // }
-    // }
-    // return this._transformation;
-    // },
-    //
-    // /** Returns the current scale */
-    // getScale : function() {
-    // return this.options.scale || 1;
-    // },
 
     /** Returns the initial shift */
     getOrigin : function() {
@@ -219,16 +176,5 @@ extend(GeometryRenderer.prototype, {
     },
 
 });
-
-// defines how the world scales with zoom
-GeometryRenderer.calculateScale = function(zoom, tileSize) {
-    tileSize = tileSize || 256;
-    return tileSize * Math.pow(2, zoom);
-};
-
-GeometryRenderer.calculateZoom = function(scale, tileSize) {
-    tileSize = tileSize || 256;
-    return Math.log(scale / tileSize) / Math.LN2;
-};
 
 module.exports = GeometryRenderer;

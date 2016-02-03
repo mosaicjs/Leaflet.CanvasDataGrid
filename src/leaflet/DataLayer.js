@@ -3,6 +3,7 @@ var CanvasContext = require('../canvas/CanvasContext');
 var GeometryRenderer = require('../canvas/GeometryRenderer');
 var GeoJsonUtils = require('../data/GeoJsonUtils');
 var GeometryUtils = require('../data/GeometryUtils');
+var DataLayerTracker = require('./DataLayerTracker');
 
 /**
  * This layer draws data on canvas tiles.
@@ -16,11 +17,20 @@ var DataLayer = ParentLayer.extend({
     initialize : function(options) {
         ParentLayer.prototype.initialize.apply(this, arguments);
         this._newCanvas = this._newCanvas.bind(this);
-        this._getImageMaskIndex = this._getImageMaskIndex.bind(this);
+        this._tracker = this.options.tracker;
+        if (!this._tracker && !this.options.noTracker) {
+            this._tracker = new DataLayerTracker(options);
+        }
+        if (this._tracker) {
+            this._tracker.setDataLayer(this);
+        }
     },
 
     onAdd : function(map) {
         ParentLayer.prototype.onAdd.apply(this, arguments);
+        if (this._tracker) {
+            map.addLayer(this._tracker);
+        }
         this._map.on('mousemove', this._onMouseMove, this);
         this._map.on('click', this._onClick, this);
         this._map.on('zoomstart', this._onZoomStart, this);
@@ -32,6 +42,9 @@ var DataLayer = ParentLayer.extend({
         this._map.off('zoomstart', this._onZoomStart, this);
         this._map.off('click', this._onClick, this);
         this._map.off('mousemove', this._onMouseMove, this);
+        if (this._tracker) {
+            map.removeLayer(this._tracker);
+        }
         ParentLayer.prototype.onRemove.apply(this, arguments);
     },
 
@@ -68,26 +81,22 @@ var DataLayer = ParentLayer.extend({
         var bbox = this._getTileBbox(tilePoint);
         var origin = [ bbox[0][0], bbox[1][1] ];
 
-        var pad = this._getTilePad(tilePoint);
+        var pad = this._getTilePad();
         var extendedBbox = this.expandBbox(bbox, pad);
 
         var size = Math.min(tileSize.x, tileSize.y);
-        var scale = GeometryRenderer.calculateScale(tilePoint.z, size);
-        var style = this._getStyleProvider();
 
         var resolution = this.options.resolution || 4;
         var context = new CanvasContext({
             canvas : canvas,
             newCanvas : this._newCanvas,
             resolution : resolution,
-            imageMaskIndex : this._getImageMaskIndex
         });
         var map = this._map;
         var provider = this._getDataProvider();
         var renderer = new GeometryRenderer({
             context : context,
             tileSize : tileSize,
-            scale : scale,
             origin : origin,
             bbox : extendedBbox,
             getGeometry : provider.getGeometry.bind(provider),
@@ -111,20 +120,26 @@ var DataLayer = ParentLayer.extend({
         tile.context = context;
         tile.renderer = renderer;
 
+        var styles = this._getDataStyles();
         this.loadData(extendedBbox, function(err, data) {
             if (!err && data && data.length) {
                 var drawOptions = {
                     tilePoint : tilePoint,
                     map : this._map
                 };
-                if (typeof data.forEach === 'function') {
-                    data.forEach(function(d, i) {
-                        renderer.drawFeature(d, style, drawOptions);
-                    })
-                } else if (data.length) {
+                var forEach = (typeof data.forEach === 'function') //
+                ? data.forEach.bind(data) //
+                : function(f) {
                     for (var i = 0; i < data.length; i++) {
-                        renderer.drawFeature(data[i], style, drawOptions);
+                        f(data[i], i);
                     }
+                };
+                for (var i = 0; i < styles.length; i++) {
+                    (function(style) {
+                        forEach(function(d, i) {
+                            renderer.drawFeature(d, style, drawOptions);
+                        });
+                    })(styles[i]);
                 }
             }
         }.bind(this));
@@ -208,13 +223,10 @@ var DataLayer = ParentLayer.extend({
     },
 
     /** Returns the pad (in pixels) around a tile */
-    _getTilePad : function(tilePoint) {
-        var tilePad = this.options.tilePad;
-        if (typeof tilePad === 'function') {
-            tilePad = this.options.tilePad({
-                tilePoint : tilePoint
-            });
-        }
+    _getTilePad : function() {
+        var style = this._getDataStyle();
+        var zoom = this._map.getZoom();
+        var tilePad = style.getTilePad(zoom);
         return tilePad;
     },
 
@@ -224,8 +236,14 @@ var DataLayer = ParentLayer.extend({
         return this.options.provider;
     },
 
-    _getStyleProvider : function() {
-        return this.options.style;
+    _getDataStyles : function() {
+        var styles = this.options.styles || [ this.options.style ];
+        return styles;
+    },
+
+    _getDataStyle : function() {
+        var styles = this._getDataStyles();
+        return styles[0];
     },
 
     // -----------------------------------------------------------------------
@@ -234,18 +252,6 @@ var DataLayer = ParentLayer.extend({
         canvas.width = w;
         canvas.height = h;
         return canvas;
-    },
-
-    _getImageMaskIndex : function(image, options) {
-        var index = this.options.imageIndex;
-        if (typeof index === 'function') {
-            this._getImageMaskIndex = index.bind(this);
-        } else {
-            this._getImageMaskIndex = function() {
-                return index;
-            }.bind(this);
-        }
-        return this._getImageMaskIndex(image, options);
     },
 
     // -----------------------------------------------------------------------
@@ -308,16 +314,7 @@ var DataLayer = ParentLayer.extend({
 
     loadDataAround : function(latlng, radiusInPixels, callback) {
         var bbox = this.pixelsToBbox(latlng, radiusInPixels);
-        return this.loadData(bbox, function(err, list) {
-            if (err) {
-                return callback(err);
-            } else {
-                // TODO: add data filtering; return only geometries
-                // intersecting with the bbox.
-                // list = filter(list);
-                return callback(null, list);
-            }
-        });
+        return this.loadData(bbox, callback);
     },
 
     openPopup : function(latlng) {

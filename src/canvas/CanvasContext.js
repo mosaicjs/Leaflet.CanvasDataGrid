@@ -64,8 +64,7 @@ extend(CanvasContext.prototype, IGridIndex.prototype, {
      */
     drawImage : function(image, position, options) {
         this._drawOnCanvasContext(options, function(g) {
-            g.globalCompositeOperation = 'source-over';
-            g.globalAlpha = 1;
+            this._setCanvasStyles(g, options);
             g.drawImage(image, position[0], position[1]);
             return true;
         });
@@ -160,7 +159,7 @@ extend(CanvasContext.prototype, IGridIndex.prototype, {
         if (!options)
             return;
         g.globalAlpha = options.globalAlpha || options.fillOpacity
-                || options.lineOpacity || options.opacity || 0;
+                || options.lineOpacity || options.opacity || 1;
         g.fillStyle = options.fillColor || options.color;
         if (options.fillImage) {
             g.fillStyle = g.createPattern(options.fillImage, "repeat");
@@ -169,6 +168,10 @@ extend(CanvasContext.prototype, IGridIndex.prototype, {
         g.lineWidth = options.lineWidth || options.width || 0;
         g.lineCap = options.lineCap || 'round'; // 'butt|round|square'
         g.lineJoin = options.lineJoin || 'round'; // 'miter|round|bevel'
+
+        var compositeOperation = options.compositeOperation
+                || options.composition || 'source-over';
+        g.globalCompositeOperation = compositeOperation;// 
     },
 
     // -----------------------------------------------------------------------

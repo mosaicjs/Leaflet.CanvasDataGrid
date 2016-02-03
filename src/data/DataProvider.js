@@ -71,6 +71,7 @@ DataProvider.prototype = {
         var array = this._rtree.search(coords);
         array = this._sortByDistance(array, bbox);
         var result = [];
+        var filterMultiPoints = !!this.options.filterPoints;
         for (var i = 0; i < array.length; i++) {
             var arr = array[i];
             var r = arr.data;
@@ -79,7 +80,8 @@ DataProvider.prototype = {
             GeoJsonUtils.forEachGeometry(geometry, {
                 onPoints : function(points) {
                     if (!handled
-                            && GeometryUtils.bboxContainsPoints(points, bbox)) {
+                            && (!filterMultiPoints || GeometryUtils
+                                    .bboxContainsPoints(points, bbox))) {
                         result.push(r);
                         handled = true;
                     }
