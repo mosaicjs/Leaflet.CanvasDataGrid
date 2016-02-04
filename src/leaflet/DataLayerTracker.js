@@ -1,6 +1,41 @@
 var L = require('leaflet');
 
-var DataLayerTracker = L.Layer.extend({
+var ParentType;
+if (L.Layer) {
+    // v1.0.0-beta2
+    ParentType = L.Layer.extend({
+        _getPane : function() {
+            return this._map.getPane(this.options.pane);
+        },
+    });
+    ParentType.throttle = L.Util.throttle;
+} else {
+    // v0.7.7
+    ParentType = L.Class.extend({
+        includes : L.Mixin.Events,
+        _getPane : function() {
+            var panes = this._map.getPanes();
+            return panes[this.options.pane];
+        }
+    });
+    ParentType.throttle = function(f, time, context) {
+        var timeoutId, that, args;
+        return function() {
+            that = context || this;
+            args = [];
+            for (var i = 0; i < arguments.length; i++) {
+                args.push(arguments[i]);
+            }
+            if (timeoutId === undefined) {
+                timeoutId = setTimeout(function() {
+                    timeoutId = undefined;
+                    return f.apply(that, args);
+                }, time);
+            }
+        };
+    }
+}
+var DataLayerTracker = ParentType.extend({
     options : {
         pane : 'markerPane',
     // interactive: false,
@@ -11,7 +46,8 @@ var DataLayerTracker = L.Layer.extend({
     initialize : function(options) {
         L.setOptions(this, options);
         var timeout = 50;
-        this._refreshData = L.Util.throttle(this._refreshData, timeout, this);
+        this._refreshData = ParentType.throttle(this._refreshData, timeout,
+                this);
     },
 
     setDataLayer : function(layer) {
@@ -151,10 +187,6 @@ var DataLayerTracker = L.Layer.extend({
             marginLeft : -(r / 2) + 'px',
             marginTop : -(r / 2) + 'px',
         };
-    },
-
-    _getPane : function() {
-        return this._map.getPane(this.options.pane);
     },
 
     _initIcon : function() {

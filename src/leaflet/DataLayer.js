@@ -8,14 +8,67 @@ var DataLayerTracker = require('./DataLayerTracker');
 /**
  * This layer draws data on canvas tiles.
  */
-var ParentLayer = L.GridLayer;
+var ParentLayer;
+if (L.GridLayer) {
+    // for v1.0.0-beta2
+    ParentLayer = L.GridLayer.extend({
+        _loadTile : function(tile, tilePoint) {
+            tile._layer = this;
+            tile._tilePoint = tilePoint;
+            this._drawTile(tile, tilePoint);
+            return tile;
+        },
+
+    });
+} else {
+    // for v0.7.7
+    ParentLayer = L.TileLayer
+            .extend({
+
+                includes : L.Mixin.Events,
+
+                _tileCoordsToBounds : function(coords) {
+                    var map = this._map;
+                    var tileSize = this.getTileSize();
+                    var nwPoint = L.point(coords.x * tileSize.x, coords.y
+                            * tileSize.y);
+                    var sePoint = L.point(nwPoint.x + tileSize.x, nwPoint.y
+                            + tileSize.y);
+                    var nw = map.unproject(nwPoint, coords.z);
+                    var se = map.unproject(sePoint, coords.z);
+                    return new L.LatLngBounds(nw, se);
+                },
+
+                getTileSize : function() {
+                    // for v0.7.7
+                    var s = this._getTileSize();
+                    return new L.Point(s, s);
+                },
+
+                _tileCoordsToKey : function(coords) {
+                    return coords.x + ':' + coords.y + ':' + coords.z;
+                },
+
+                _loadTile : function(tile, tilePoint) {
+                    tile._layer = this;
+                    tile._tilePoint = tilePoint;
+                    this._adjustTilePoint(tilePoint);
+                    this._drawTile(tile, tilePoint);
+                    this._tileOnLoad.call(tile);
+                    return tile;
+                },
+
+            });
+}
 var DataLayer = ParentLayer.extend({
     options : {
         pane : 'overlayPane',
+        reuseTiles : false
     },
 
     initialize : function(options) {
         ParentLayer.prototype.initialize.apply(this, arguments);
+        options = L.setOptions(this, options);
         this._newCanvas = this._newCanvas.bind(this);
         this._tracker = this.options.tracker;
         if (!this._tracker && !this.options.noTracker) {
@@ -52,25 +105,17 @@ var DataLayer = ParentLayer.extend({
         this._popup = popup;
     },
 
-    _scheduleTileRedraw : function(tile, tilePoint) {
-        var list = this._redrawQueue = this._redrawQueue || [];
-        if (this._redrawTimeoutId === undefined) {
-            this._redrawTimeoutId = setTimeout(function() {
-                delete this._redrawTimeoutId;
-                while (this._redrawQueue && this._redrawQueue.length) {
-                    var slot = this._redrawQueue.shift();
-                    this._redrawTile(slot.tile, slot.tilePoint);
-                }
-
-            }.bind(this), 20);
-        }
-        this._redrawQueue.push({
-            tile : tile,
-            tilePoint : tilePoint
-        });
+    // v0.7.7
+    _getTile : function() {
+        var tileSize = this.getTileSize();
+        var tile = L.DomUtil.create('div', 'leaflet-tile');
+        tile.style.width = tileSize.x;
+        tile.style.height = tileSize.y;
+        return tile;
     },
 
-    _redrawTile : function(tile, tilePoint) {
+    // v0.7.7 and v1.0.0-beta
+    _drawTile : function(tile, tilePoint) {
         var tileSize = this.getTileSize();
         var canvas = this._newCanvas(tileSize.x, tileSize.y);
         tile.appendChild(canvas);
@@ -145,12 +190,10 @@ var DataLayer = ParentLayer.extend({
         }.bind(this));
     },
 
+    // for v1.0.0-beta2
     createTile : function(tilePoint) {
-        var tileSize = this.getTileSize();
-        var tile = document.createElement('div');
-        tile.style.width = tileSize.x;
-        tile.style.height = tileSize.y;
-        this._scheduleTileRedraw(tile, tilePoint);
+        var tile = this._getTile();
+        this._loadTile(tile, tilePoint);
         return tile;
     },
 
@@ -174,7 +217,8 @@ var DataLayer = ParentLayer.extend({
                 ._round();
         var tileSize = this.getTileSize();
         // Get the coordinates of the tile
-        var tileCoords = containerPoint.unscaleBy(tileSize);
+        var tileCoords = L.point(containerPoint.x / tileSize.x,
+                containerPoint.y / tileSize.y);
         // Get geographical coordinates (bounds) of the tile
         var tileBounds = this._tileCoordsToBounds(tileCoords);
         // Translate shit in pixels to new coordinates
@@ -248,7 +292,7 @@ var DataLayer = ParentLayer.extend({
 
     // -----------------------------------------------------------------------
     _newCanvas : function(w, h) {
-        var canvas = document.createElement('canvas');
+        var canvas = L.DomUtil.create('canvas');
         canvas.width = w;
         canvas.height = h;
         return canvas;
@@ -281,7 +325,7 @@ var DataLayer = ParentLayer.extend({
     _isTransparent : function(latlng) {
         var p = this._map.project(latlng).floor();
         var tileSize = this.getTileSize();
-        var coords = p.unscaleBy(tileSize).floor();
+        var coords = L.point(p.x / tileSize.x, p.y / tileSize.y).floor();
         coords.z = this._map.getZoom();
         var key = this._tileCoordsToKey(coords);
         var slot = this._tiles[key];

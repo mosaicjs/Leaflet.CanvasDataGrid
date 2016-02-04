@@ -354,7 +354,6 @@ module.exports = {
      * at least one of the given polygons.
      */
     bboxIntersectsPolygons : function(polygons, bbox) {
-        var clip = this.getClippingPolygon(bbox);
         for (var i = 0; i < polygons.length; i++) {
             if (this.bboxIntersectsPolygon(polygons[i], bbox))
                 return true;
