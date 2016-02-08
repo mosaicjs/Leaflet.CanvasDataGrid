@@ -3,7 +3,6 @@ var CanvasContext = require('../canvas/CanvasContext');
 var GeometryRenderer = require('../canvas/GeometryRenderer');
 var GeoJsonUtils = require('../data/GeoJsonUtils');
 var GeometryUtils = require('../data/GeometryUtils');
-var DataLayerTracker = require('./DataLayerTracker');
 
 /**
  * This layer draws data on canvas tiles.
@@ -70,20 +69,10 @@ var DataLayer = ParentLayer.extend({
         ParentLayer.prototype.initialize.apply(this, arguments);
         options = L.setOptions(this, options);
         this._newCanvas = this._newCanvas.bind(this);
-        this._tracker = this.options.tracker;
-        if (!this._tracker && !this.options.noTracker) {
-            this._tracker = new DataLayerTracker(options);
-        }
-        if (this._tracker) {
-            this._tracker.setDataLayer(this);
-        }
     },
 
     onAdd : function(map) {
         ParentLayer.prototype.onAdd.apply(this, arguments);
-        if (this._tracker) {
-            map.addLayer(this._tracker);
-        }
         this._map.on('mousemove', this._onMouseMove, this);
         this._map.on('click', this._onClick, this);
         this._map.on('zoomstart', this._onZoomStart, this);
@@ -95,9 +84,6 @@ var DataLayer = ParentLayer.extend({
         this._map.off('zoomstart', this._onZoomStart, this);
         this._map.off('click', this._onClick, this);
         this._map.off('mousemove', this._onMouseMove, this);
-        if (this._tracker) {
-            map.removeLayer(this._tracker);
-        }
         ParentLayer.prototype.onRemove.apply(this, arguments);
     },
 

@@ -48,6 +48,7 @@ var DataLayerTracker = ParentType.extend({
         var timeout = 50;
         this._refreshData = ParentType.throttle(this._refreshData, timeout,
                 this);
+        this.setDataLayer(this.options.dataLayer);
     },
 
     setDataLayer : function(layer) {
@@ -76,7 +77,6 @@ var DataLayerTracker = ParentType.extend({
         if (ev.latlng) {
             this._setLatLng(ev.latlng);
         }
-        console.log('_onMove', (this._x = (this._x || 0) + 1), ev);
         this._refreshData();
         this._refreshIcon();
     },
@@ -110,7 +110,7 @@ var DataLayerTracker = ParentType.extend({
         this._element.innerHTML = '';
         var elm = L.DomUtil.create('div', '', this._element);
         elm.innerHTML = data.length + '';
-        var style = this._getTooltipStyle();
+        var style = this._getTooltipStyle(elm, data);
         L.Util.extend(elm.style, style);
     },
 
@@ -119,7 +119,7 @@ var DataLayerTracker = ParentType.extend({
         if (!this._show) {
             return;
         }
-        var style = this._getBorderStyle();
+        var style = this._getBorderStyle(elm);
         L.Util.extend(elm.style, style);
     },
 
@@ -164,33 +164,63 @@ var DataLayerTracker = ParentType.extend({
         return this._r(zoom);
     },
 
-    _getTooltipStyle : function() {
-        var color = this.options.trackerColor || 'gray';
-        return {
-            position : 'absolute',
-            backgroundColor : 'white',
-            top : '-1em',
-            left : '100%',
-            padding : '0.1em 0.5em',
-            border : '1px solid ' + color,
-            borderRadius : '0.8em',
-            borderBottomLeftRadius : '0',
-        };
+    _getTooltipStyle : function(elm, data) {
+        return this._getStyle('tooltipStyle', elm, data, function(){
+          if (!data.length)
+             return { display : 'none' };
+          var r = this._getRadius();
+          var max = 15;
+          var shift = (r > max) ? '-1em' : '-2em';
+          var color = this.options.tooltipColor || this.options.color || 'gray';
+          var textColor = this.options.tooltipTextColor || this.options.color || 'black';
+          var bgColor = this.options.tooltipBgColor || 'white';
+          return {
+              display : 'block',
+              position : 'absolute',
+              backgroundColor : bgColor,
+              top : shift,
+              left : '100%',
+              padding : '0.1em 0.5em',
+              border : '1px solid ' + color,
+              color : textColor,
+              borderRadius : '0.8em',
+              borderBottomLeftRadius : '0',
+          };
+        });
     },
 
-    _getBorderStyle : function() {
-        var r = this._getRadius();
-        var d = r * 2;
-        var color = this.options.trackerColor || 'rgba(255, 255, 255, .5)';
-        return {
-            border : '5px solid ' + color,
-            borderRadius : d + 'px',
-            height : d + 'px',
-            width : d + 'px',
-            background : 'none',
-            marginLeft : -r + 'px',
-            marginTop : -r + 'px',
-        };
+    _getBorderStyle : function(elm, data) {
+        return this._getStyle('trackerStyle', elm, data, function(){
+          var r = this._getRadius();
+          var d = r * 2;
+          var border = this.options.trackerBorder || this.options.border;
+          if (!border) {
+              var color = this.options.trackerColor
+                  || this.options.color
+                  || 'rgba(255, 255, 255, .5)';
+              var borderWidth = this.options.trackerWidth
+                  || this.options.width
+                  || 1;
+              border = borderWidth + 'px solid ' + color;
+          } 
+          return {
+              border : border,
+              borderRadius : d + 'px',
+              height : d + 'px',
+              width : d + 'px',
+              background : 'none',
+              marginLeft : -r + 'px',
+              marginTop : -r + 'px',
+          };
+        });
+    },
+
+    _getStyle : function(key, elm, data, f){
+        var val = this.options[key] || f;
+        if (typeof val === 'function') {
+            val = val.call(this, elm, data);
+        }
+        return val;
     },
 
     _initIcon : function() {
