@@ -57,13 +57,13 @@ var DataLayerTracker = ParentType.extend({
     onAdd : function(map) {
         this._map = map;
         this._initIcon();
-        this._map.on('mousemove', this._onMouseMove, this);
+        this._map.on('mousemove zoomend mouvend', this._onMove, this);
         this._dataLayer.on('mouseenter', this._onMouseEnter, this);
         this._dataLayer.on('mouseleave', this._onMouseLeave, this);
     },
 
     onRemove : function(map) {
-        this._map.off('mousemove', this._onMouseMove, this);
+        this._map.off('mousemove zoomend mouvend', this._onMove, this);
         this._dataLayer.off('mouseenter', this._onMouseEnter, this);
         this._dataLayer.off('mouseleave', this._onMouseLeave, this);
         this._removeIcon();
@@ -72,8 +72,11 @@ var DataLayerTracker = ParentType.extend({
 
     // -----------------------------------------------------------------------
 
-    _onMouseMove : function(ev) {
-        this._setLatLng(ev.latlng);
+    _onMove : function(ev) {
+        if (ev.latlng) {
+            this._setLatLng(ev.latlng);
+        }
+        console.log('_onMove', (this._x = (this._x || 0) + 1), ev);
         this._refreshData();
         this._refreshIcon();
     },
@@ -95,7 +98,7 @@ var DataLayerTracker = ParentType.extend({
             return;
         var radius = this._getRadius();
         var that = this;
-        this._dataLayer.loadDataAround(this._latlng, radius, //
+        this._dataLayer.loadDataAround(this._latlng, [ radius, radius ], //
         function(err, data) {
             that._data = data;
             that._renderData();
@@ -177,15 +180,16 @@ var DataLayerTracker = ParentType.extend({
 
     _getBorderStyle : function() {
         var r = this._getRadius();
+        var d = r * 2;
         var color = this.options.trackerColor || 'rgba(255, 255, 255, .5)';
         return {
             border : '5px solid ' + color,
-            borderRadius : r + 'px',
-            height : r + 'px',
-            width : r + 'px',
+            borderRadius : d + 'px',
+            height : d + 'px',
+            width : d + 'px',
             background : 'none',
-            marginLeft : -(r / 2) + 'px',
-            marginTop : -(r / 2) + 'px',
+            marginLeft : -r + 'px',
+            marginTop : -r + 'px',
         };
     },
 
