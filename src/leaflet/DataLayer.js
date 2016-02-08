@@ -17,7 +17,9 @@ if (L.GridLayer) {
             this._drawTile(tile, tilePoint);
             return tile;
         },
-
+        _tileCoordsToKey : function(coords) {
+            return coords.x + ':' + coords.y + ':' + coords.z;
+        },
     });
 } else {
     // for v0.7.7
@@ -38,14 +40,14 @@ if (L.GridLayer) {
                     return new L.LatLngBounds(nw, se);
                 },
 
+                _tileCoordsToKey : function(coords) {
+                    return coords.x + ':' + coords.y;
+                },
+
                 getTileSize : function() {
                     // for v0.7.7
                     var s = this._getTileSize();
                     return new L.Point(s, s);
-                },
-
-                _tileCoordsToKey : function(coords) {
-                    return coords.x + ':' + coords.y + ':' + coords.z;
                 },
 
                 _loadTile : function(tile, tilePoint) {
@@ -56,6 +58,14 @@ if (L.GridLayer) {
                     this._tileOnLoad.call(tile);
                     return tile;
                 },
+
+                _initContainer: function () {
+                    L.TileLayer.prototype._initContainer.apply(this, arguments);
+                    if (this.options.pane) {
+                        var tilePane = this._map._panes[this.options.pane];
+                        tilePane.appendChild(this._container);
+                    }
+                }
 
             });
 }
@@ -317,7 +327,8 @@ var DataLayer = ParentLayer.extend({
         var slot = this._tiles[key];
         if (!slot)
             return;
-        var tile = slot.el;
+
+        var tile = slot.el /* v1.0.0-beta */ || slot /*  v0.7.7 */;
         if (!tile.context)
             return;
         var x = p.x % tileSize.x;
@@ -364,34 +375,28 @@ var DataLayer = ParentLayer.extend({
     },
 
     _onMouseMove : function(ev) {
+        this.fire('mousemove', ev);
         if (!this._isTransparent(ev.latlng)) {
             ev.target = this;
             ev.map = this._map;
             // ev.array = data;
             // ev.data = data[0];
-            this.fire('mousemove', ev);
-            this._setMouseOverStyle(true, ev);
+            this._setMouseOver(true, ev);
         } else {
-            this._setMouseOverStyle(false, ev);
+            this._setMouseOver(false, ev);
         }
     },
 
-    _setMouseOverStyle : function(set, ev) {
+    _setMouseOver : function(set, ev) {
         set = !!set;
-        if (!!this._mouseover !== set) {
-            var delta = set ? 1 : -1;
-            this._map._mouseoverCounter = //
-            (this._map._mouseoverCounter || 0) + delta;
-            var el = this._map._container;
-            if (!!this._map._mouseoverCounter) {
-                el.style.cursor = 'pointer';
-                this.fire('mouseenter', ev);
-            } else {
-                el.style.cursor = 'auto';
-                this.fire('mouseleave', ev);
-            }
+        if (this._mouseover !== set) {
+           this._mouseover = set;
+           if (this._mouseover){
+               this.fire('mouseenter', ev, this);
+           } else {
+               this.fire('mouseleave', ev, this);
+           }
         }
-        this._mouseover = set;
     }
 
 });

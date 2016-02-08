@@ -46,7 +46,9 @@ var DataLayerTracker = ParentType.extend({
     initialize : function(options) {
         L.setOptions(this, options);
         var timeout = 50;
-        this._refreshData = ParentType.throttle(this._refreshData, timeout,
+        this._refreshData = ParentType.throttle(this._refreshData, timeout * 2,
+                this);
+        this._refreshIcon = ParentType.throttle(this._refreshIcon, timeout,
                 this);
         this.setDataLayer(this.options.dataLayer);
     },
@@ -58,15 +60,11 @@ var DataLayerTracker = ParentType.extend({
     onAdd : function(map) {
         this._map = map;
         this._initIcon();
-        this._map.on('mousemove zoomend mouvend', this._onMove, this);
-        this._dataLayer.on('mouseenter', this._onMouseEnter, this);
-        this._dataLayer.on('mouseleave', this._onMouseLeave, this);
+        this._map.on('mousemove zoomend moveend', this._onMove, this);
     },
 
     onRemove : function(map) {
-        this._map.off('mousemove zoomend mouvend', this._onMove, this);
-        this._dataLayer.off('mouseenter', this._onMouseEnter, this);
-        this._dataLayer.off('mouseleave', this._onMouseLeave, this);
+        this._map.off('mousemove zoomend moveend', this._onMove, this);
         this._removeIcon();
         delete this._map;
     },
@@ -81,20 +79,10 @@ var DataLayerTracker = ParentType.extend({
         this._refreshIcon();
     },
 
-    _onMouseEnter : function(ev) {
-        this._show = true;
-        this._element.style.display = 'block';
-    },
-
-    _onMouseLeave : function(ev) {
-        this._show = false;
-        this._element.style.display = 'none';
-    },
-
     // -----------------------------------------------------------------------
 
     _refreshData : function() {
-        if (!this._show || !this._latlng)
+        if (!this._latlng)
             return;
         var radius = this._getRadius();
         var that = this;
@@ -116,10 +104,7 @@ var DataLayerTracker = ParentType.extend({
 
     _refreshIcon : function() {
         var elm = this._element;
-        if (!this._show) {
-            return;
-        }
-        var style = this._getBorderStyle(elm);
+        var style = this._getTrackerStyle(elm, this._data);
         L.Util.extend(elm.style, style);
     },
 
@@ -189,7 +174,7 @@ var DataLayerTracker = ParentType.extend({
         });
     },
 
-    _getBorderStyle : function(elm, data) {
+    _getTrackerStyle : function(elm, data) {
         return this._getStyle('trackerStyle', elm, data, function(){
           var r = this._getRadius();
           var d = r * 2;
@@ -200,7 +185,7 @@ var DataLayerTracker = ParentType.extend({
                   || 'rgba(255, 255, 255, .5)';
               var borderWidth = this.options.trackerWidth
                   || this.options.width
-                  || 1;
+                  || 3;
               border = borderWidth + 'px solid ' + color;
           } 
           return {
@@ -229,7 +214,6 @@ var DataLayerTracker = ParentType.extend({
             var container = this._getPane();
             this._element = L.DomUtil.create('div', className, container);
         }
-        this._element.style.display = 'none';
         return this._element;
     },
 

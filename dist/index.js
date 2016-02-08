@@ -104,8 +104,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	            tile._tilePoint = tilePoint;
 	            this._drawTile(tile, tilePoint);
 	            return tile;
+	        },
+	        _tileCoordsToKey: function _tileCoordsToKey(coords) {
+	            return coords.x + ':' + coords.y + ':' + coords.z;
 	        }
-
 	    });
 	} else {
 	    // for v0.7.7
@@ -123,14 +125,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	            return new L.LatLngBounds(nw, se);
 	        },
 
+	        _tileCoordsToKey: function _tileCoordsToKey(coords) {
+	            return coords.x + ':' + coords.y;
+	        },
+
 	        getTileSize: function getTileSize() {
 	            // for v0.7.7
 	            var s = this._getTileSize();
 	            return new L.Point(s, s);
-	        },
-
-	        _tileCoordsToKey: function _tileCoordsToKey(coords) {
-	            return coords.x + ':' + coords.y + ':' + coords.z;
 	        },
 
 	        _loadTile: function _loadTile(tile, tilePoint) {
@@ -140,6 +142,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	            this._drawTile(tile, tilePoint);
 	            this._tileOnLoad.call(tile);
 	            return tile;
+	        },
+
+	        _initContainer: function _initContainer() {
+	            L.TileLayer.prototype._initContainer.apply(this, arguments);
+	            if (this.options.pane) {
+	                var tilePane = this._map._panes[this.options.pane];
+	                tilePane.appendChild(this._container);
+	            }
 	        }
 
 	    });
@@ -396,7 +406,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var key = this._tileCoordsToKey(coords);
 	        var slot = this._tiles[key];
 	        if (!slot) return;
-	        var tile = slot.el;
+
+	        var tile = slot.el /* v1.0.0-beta */ || slot /*  v0.7.7 */;
 	        if (!tile.context) return;
 	        var x = p.x % tileSize.x;
 	        var y = p.y % tileSize.y;
@@ -440,34 +451,28 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    _onMouseMove: function _onMouseMove(ev) {
+	        this.fire('mousemove', ev);
 	        if (!this._isTransparent(ev.latlng)) {
 	            ev.target = this;
 	            ev.map = this._map;
 	            // ev.array = data;
 	            // ev.data = data[0];
-	            this.fire('mousemove', ev);
-	            this._setMouseOverStyle(true, ev);
+	            this._setMouseOver(true, ev);
 	        } else {
-	            this._setMouseOverStyle(false, ev);
+	            this._setMouseOver(false, ev);
 	        }
 	    },
 
-	    _setMouseOverStyle: function _setMouseOverStyle(set, ev) {
+	    _setMouseOver: function _setMouseOver(set, ev) {
 	        set = !!set;
-	        if (!!this._mouseover !== set) {
-	            var delta = set ? 1 : -1;
-	            this._map._mouseoverCounter = //
-	            (this._map._mouseoverCounter || 0) + delta;
-	            var el = this._map._container;
-	            if (!!this._map._mouseoverCounter) {
-	                el.style.cursor = 'pointer';
-	                this.fire('mouseenter', ev);
+	        if (this._mouseover !== set) {
+	            this._mouseover = set;
+	            if (this._mouseover) {
+	                this.fire('mouseenter', ev, this);
 	            } else {
-	                el.style.cursor = 'auto';
-	                this.fire('mouseleave', ev);
+	                this.fire('mouseleave', ev, this);
 	            }
 	        }
-	        this._mouseover = set;
 	    }
 
 	});
@@ -1598,7 +1603,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	    initialize: function initialize(options) {
 	        L.setOptions(this, options);
 	        var timeout = 50;
-	        this._refreshData = ParentType.throttle(this._refreshData, timeout, this);
+	        this._refreshData = ParentType.throttle(this._refreshData, timeout * 2, this);
+	        this._refreshIcon = ParentType.throttle(this._refreshIcon, timeout, this);
 	        this.setDataLayer(this.options.dataLayer);
 	    },
 
@@ -1609,15 +1615,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	    onAdd: function onAdd(map) {
 	        this._map = map;
 	        this._initIcon();
-	        this._map.on('mousemove zoomend mouvend', this._onMove, this);
-	        this._dataLayer.on('mouseenter', this._onMouseEnter, this);
-	        this._dataLayer.on('mouseleave', this._onMouseLeave, this);
+	        this._map.on('mousemove zoomend moveend', this._onMove, this);
 	    },
 
 	    onRemove: function onRemove(map) {
-	        this._map.off('mousemove zoomend mouvend', this._onMove, this);
-	        this._dataLayer.off('mouseenter', this._onMouseEnter, this);
-	        this._dataLayer.off('mouseleave', this._onMouseLeave, this);
+	        this._map.off('mousemove zoomend moveend', this._onMove, this);
 	        this._removeIcon();
 	        delete this._map;
 	    },
@@ -1632,20 +1634,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this._refreshIcon();
 	    },
 
-	    _onMouseEnter: function _onMouseEnter(ev) {
-	        this._show = true;
-	        this._element.style.display = 'block';
-	    },
-
-	    _onMouseLeave: function _onMouseLeave(ev) {
-	        this._show = false;
-	        this._element.style.display = 'none';
-	    },
-
 	    // -----------------------------------------------------------------------
 
 	    _refreshData: function _refreshData() {
-	        if (!this._show || !this._latlng) return;
+	        if (!this._latlng) return;
 	        var radius = this._getRadius();
 	        var that = this;
 	        this._dataLayer.loadDataAround(this._latlng, [radius, radius], //
@@ -1666,10 +1658,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	    _refreshIcon: function _refreshIcon() {
 	        var elm = this._element;
-	        if (!this._show) {
-	            return;
-	        }
-	        var style = this._getBorderStyle(elm);
+	        var style = this._getTrackerStyle(elm, this._data);
 	        L.Util.extend(elm.style, style);
 	    },
 
@@ -1737,14 +1726,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	        });
 	    },
 
-	    _getBorderStyle: function _getBorderStyle(elm, data) {
+	    _getTrackerStyle: function _getTrackerStyle(elm, data) {
 	        return this._getStyle('trackerStyle', elm, data, function () {
 	            var r = this._getRadius();
 	            var d = r * 2;
 	            var border = this.options.trackerBorder || this.options.border;
 	            if (!border) {
 	                var color = this.options.trackerColor || this.options.color || 'rgba(255, 255, 255, .5)';
-	                var borderWidth = this.options.trackerWidth || this.options.width || 1;
+	                var borderWidth = this.options.trackerWidth || this.options.width || 3;
 	                border = borderWidth + 'px solid ' + color;
 	            }
 	            return {
@@ -1773,7 +1762,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	            var container = this._getPane();
 	            this._element = L.DomUtil.create('div', className, container);
 	        }
-	        this._element.style.display = 'none';
 	        return this._element;
 	    },
 
