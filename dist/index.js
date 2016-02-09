@@ -184,6 +184,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	    bindPopup: function bindPopup(popup) {
 	        this._popup = popup;
+	        console.log('>> bindPopup', popup);
 	    },
 
 	    // v0.7.7
@@ -1560,7 +1561,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	var ParentType;
 	if (L.Layer) {
 	    // v1.0.0-beta2
-	    ParentType = L.Layer.extend({
+	    ParentType = L.Marker.extend({
 	        _getPane: function _getPane() {
 	            return this._map.getPane(this.options.pane);
 	        }
@@ -1568,7 +1569,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    ParentType.throttle = L.Util.throttle;
 	} else {
 	    // v0.7.7
-	    ParentType = L.Class.extend({
+	    ParentType = L.Marker.extend({
 	        includes: L.Mixin.Events,
 	        _getPane: function _getPane() {
 	            var panes = this._map.getPanes();
@@ -1601,7 +1602,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	    // riseOnHover: true,
 	    // riseOffset: 250
 	    initialize: function initialize(options) {
-	        L.setOptions(this, options);
+	        options = options || {
+	            clickable: false
+	        };
+	        ParentType.prototype.initialize.call(this, L.latLng(0, 0), options);
+	        this.options.icon = L.divIcon({});
 	        var timeout = 50;
 	        this._refreshData = ParentType.throttle(this._refreshData, timeout * 2, this);
 	        this._refreshIcon = ParentType.throttle(this._refreshIcon, timeout, this);
@@ -1613,22 +1618,47 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    onAdd: function onAdd(map) {
-	        this._map = map;
+	        ParentType.prototype.onAdd.apply(this, arguments);
 	        this._initIcon();
 	        this._map.on('mousemove zoomend moveend', this._onMove, this);
+	        this._map.on('click', this._onMapClicked, this);
+	        this.on('popupopen', this._onPopupOpen, this);
+	        this.on('popupclose', this._onPopupClose, this);
 	    },
 
 	    onRemove: function onRemove(map) {
+	        this.off('popupclose', this._onPopupClose, this);
+	        this.off('popupopen', this._onPopupOpen, this);
+	        this._map.off('click', this._onMapClicked, this);
 	        this._map.off('mousemove zoomend moveend', this._onMove, this);
 	        this._removeIcon();
-	        delete this._map;
+	        ParentType.prototype.onRemove.apply(this, arguments);
 	    },
 
 	    // -----------------------------------------------------------------------
 
+	    _onPopupOpen: function _onPopupOpen(ev) {
+	        this._frozen = true;
+	    },
+
+	    _onPopupClose: function _onPopupClose(ev) {
+	        this._frozen = false;
+	        this._moveTo(this._lastPos);
+	    },
+
+	    _onMapClicked: function _onMapClicked(ev) {
+	        this._moveTo(ev.latlng, true);
+	    },
+
 	    _onMove: function _onMove(ev) {
-	        if (ev.latlng) {
-	            this._setLatLng(ev.latlng);
+	        this._moveTo(ev.latlng);
+	    },
+
+	    _moveTo: function _moveTo(latlng, force) {
+	        this._lastPos = latlng || this._lastPos;
+	        if (this._frozen && !force) return;
+	        if (latlng) {
+	            this.setLatLng(latlng);
 	        }
 	        this._refreshData();
 	        this._refreshIcon();
@@ -1648,46 +1678,34 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    _renderData: function _renderData() {
-	        var data = this._data;
-	        this._element.innerHTML = '';
-	        var elm = L.DomUtil.create('div', '', this._element);
+	        var data = this.getData();
+	        var element = this.getElement();
+	        element.innerHTML = '';
+	        var elm = L.DomUtil.create('div', '', element);
 	        elm.innerHTML = data.length + '';
 	        var style = this._getTooltipStyle(elm, data);
 	        L.Util.extend(elm.style, style);
 	    },
 
 	    _refreshIcon: function _refreshIcon() {
-	        var elm = this._element;
-	        var style = this._getTrackerStyle(elm, this._data);
+	        var elm = this.getElement();
+	        var style = this._getTrackerStyle(elm, this.getData());
 	        L.Util.extend(elm.style, style);
 	    },
 
 	    // -----------------------------------------------------------------------
 
-	    getLatLng: function getLatLng() {
-	        return this._latlng;
-	    },
-
-	    _setLatLng: function _setLatLng(latlng) {
-	        if (!latlng) return;
-	        var oldLatLng = this._latlng;
-	        this._latlng = L.latLng(latlng);
-
-	        if (this._element && this._map) {
-	            var pos = this._map.latLngToLayerPoint(this._latlng).round();
-	            L.DomUtil.setPosition(this._element, pos);
-	        }
-
-	        return this.fire('move', {
-	            oldLatLng: oldLatLng,
-	            latlng: this._latlng,
-	            target: this
-	        });
-	    },
-
 	    getElement: function getElement() {
-	        return this._element;
+	        return this._icon;
 	    },
+
+	    // -----------------------------------------------------------------------
+
+	    getData: function getData() {
+	        return this._data;
+	    },
+
+	    // -----------------------------------------------------------------------
 
 	    _getRadius: function _getRadius() {
 	        if (!this._r) {
@@ -1757,19 +1775,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    _initIcon: function _initIcon() {
-	        if (!this._element) {
-	            var className = '';
-	            var container = this._getPane();
-	            this._element = L.DomUtil.create('div', className, container);
-	        }
-	        return this._element;
-	    },
-
-	    _removeIcon: function _removeIcon() {
-	        if (this._element) {
-	            L.DomUtil.remove(this._element);
-	            delete this._element;
-	        }
+	        ParentType.prototype._initIcon.apply(this, arguments);
+	        var pane = this._getPane();
+	        pane.appendChild(this._icon);
 	    }
 
 	});

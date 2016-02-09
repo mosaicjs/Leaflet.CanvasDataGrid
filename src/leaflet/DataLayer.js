@@ -99,6 +99,7 @@ var DataLayer = ParentLayer.extend({
 
     bindPopup : function(popup) {
         this._popup = popup;
+        console.log('>> bindPopup', popup);
     },
 
     // v0.7.7
