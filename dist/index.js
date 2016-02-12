@@ -1738,7 +1738,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                padding: '0.1em 0.5em',
 	                border: '1px solid ' + color,
 	                color: textColor,
-	                borderRadius: '0.8em',
+	                borderRadius: '0.5em',
 	                borderBottomLeftRadius: '0'
 	            };
 	        });
@@ -1755,6 +1755,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                border = borderWidth + 'px solid ' + color;
 	            }
 	            return {
+	                display: 'block',
 	                border: border,
 	                borderRadius: d + 'px',
 	                height: d + 'px',
@@ -1778,6 +1779,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        ParentType.prototype._initIcon.apply(this, arguments);
 	        var pane = this._getPane();
 	        pane.appendChild(this._icon);
+	        this._icon.style.display = 'none';
 	    }
 
 	});
