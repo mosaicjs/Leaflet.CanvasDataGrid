@@ -35,6 +35,13 @@ extend(GeometryRenderer.prototype, {
         var geometry = this._getGeometry(resource, options);
         if (!geometry)
             return;
+        if (typeof styles !== 'function' && typeof styles.getStyle === 'function') {
+            styles = styles.getStyle.bind(styles);
+        }
+        if (typeof styles !== 'function') {
+            var s = styles;
+            styles = function(){ return s; }
+        }
         return GeoJsonUtils.forEachGeometry(geometry, {
             onPoints : function(points) {
                 points = that._prepareMarkerCoordinates(points);
@@ -46,8 +53,10 @@ extend(GeometryRenderer.prototype, {
                 }
             },
             onLines : function(lines) {
-                var lineStyle = styles.getLineStyle(resource, extend({},
+                var lineStyle = styles(extend({},
                         options, {
+                            resource : resource,
+                            geometry : geometry,
                             coords : lines,
                             data : resource
                         }));
@@ -69,8 +78,10 @@ extend(GeometryRenderer.prototype, {
                 }
             },
             _onPolygon : function(polygon) {
-                var polygonStyle = styles.getPolygonStyle(resource, extend({},
+                var polygonStyle = styles(extend({},
                         options, {
+                            resource : resource,
+                            geometry : geometry,
                             coords : polygon,
                             data : resource
                         }));
@@ -91,8 +102,10 @@ extend(GeometryRenderer.prototype, {
         });
 
         function _drawMarker(point) {
-            var markerStyle = styles.getMarkerStyle(resource, extend({},
+            var markerStyle = styles(extend({},
                     options, {
+                        resource : resource,
+                        geometry : geometry,
                         point : point,
                         data : resource
                     }));

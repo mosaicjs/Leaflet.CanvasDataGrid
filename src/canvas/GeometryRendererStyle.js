@@ -9,7 +9,29 @@ extend(GeometryRenderStyle.prototype, {
         this.options = options || {};
         extend(this, this.options);
     },
-    
+
+    getStyle : function(options) {
+        var geometry = options.geometry;
+        var style;
+        switch (geometry.type) {
+        case 'Point':
+            style = this.getMarkerStyle(options.resource, options);
+        case 'MultiPoint':
+            break;
+        case 'LineString':
+        case 'MultiLineString':
+            style = this.getLineStyle(options.resource, options);
+            break;
+        case 'Polygon':
+        case 'MultiPolygon':
+            style = this.getPolygonStyle(options.resource, options);
+            break;
+        default:
+            break;
+        }
+        return style;
+    },
+
     /**
      * Returns an object containing a marker image, image anchor point. If there
      * is no image returned then the marker is not shown.

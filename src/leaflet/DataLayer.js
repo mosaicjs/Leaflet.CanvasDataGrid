@@ -265,10 +265,22 @@ var DataLayer = ParentLayer.extend({
 
     /** Returns the pad (in pixels) around a tile */
     _getTilePad : function() {
-        var style = this._getDataStyle();
-        var zoom = this._map.getZoom();
-        var tilePad = style.getTilePad(zoom);
-        return tilePad;
+        var tilePad = this.options.tilePad || this.options.getTilePad;
+        var obj = this.options;
+        if (!tilePad) {
+            var style = this._getDataStyle();
+            obj = style;
+            tilePad = style.tilePad || style.getTilePad;
+        };
+        if (typeof tilePad === 'function') {
+            var zoom = this._map.getZoom();
+            tilePad = tilePad.call(obj, zoom);
+        }
+        if (!tilePad){
+            var minSize = 64;
+            tilePad = [minSize, minSize, minSize, minSize];
+        }
+        return tilePad
     },
 
     // -----------------------------------------------------------------------

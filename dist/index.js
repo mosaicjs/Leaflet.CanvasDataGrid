@@ -345,9 +345,21 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	    /** Returns the pad (in pixels) around a tile */
 	    _getTilePad: function _getTilePad() {
-	        var style = this._getDataStyle();
-	        var zoom = this._map.getZoom();
-	        var tilePad = style.getTilePad(zoom);
+	        var tilePad = this.options.tilePad || this.options.getTilePad;
+	        var obj = this.options;
+	        if (!tilePad) {
+	            var style = this._getDataStyle();
+	            obj = style;
+	            tilePad = style.tilePad || style.getTilePad;
+	        };
+	        if (typeof tilePad === 'function') {
+	            var zoom = this._map.getZoom();
+	            tilePad = tilePad.call(obj, zoom);
+	        }
+	        if (!tilePad) {
+	            var minSize = 64;
+	            tilePad = [minSize, minSize, minSize, minSize];
+	        }
 	        return tilePad;
 	    },
 
@@ -1258,6 +1270,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var that = this;
 	        var geometry = this._getGeometry(resource, options);
 	        if (!geometry) return;
+	        if (typeof styles !== 'function' && typeof styles.getStyle === 'function') {
+	            styles = styles.getStyle.bind(styles);
+	        }
+	        if (typeof styles !== 'function') {
+	            var s = styles;
+	            styles = function () {
+	                return s;
+	            };
+	        }
 	        return GeoJsonUtils.forEachGeometry(geometry, {
 	            onPoints: function onPoints(points) {
 	                points = that._prepareMarkerCoordinates(points);
@@ -1269,7 +1290,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	                }
 	            },
 	            onLines: function onLines(lines) {
-	                var lineStyle = styles.getLineStyle(resource, extend({}, options, {
+	                var lineStyle = styles(extend({}, options, {
+	                    resource: resource,
+	                    geometry: geometry,
 	                    coords: lines,
 	                    data: resource
 	                }));
@@ -1290,7 +1313,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	                }
 	            },
 	            _onPolygon: function _onPolygon(polygon) {
-	                var polygonStyle = styles.getPolygonStyle(resource, extend({}, options, {
+	                var polygonStyle = styles(extend({}, options, {
+	                    resource: resource,
+	                    geometry: geometry,
 	                    coords: polygon,
 	                    data: resource
 	                }));
@@ -1310,7 +1335,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	        });
 
 	        function _drawMarker(point) {
-	            var markerStyle = styles.getMarkerStyle(resource, extend({}, options, {
+	            var markerStyle = styles(extend({}, options, {
+	                resource: resource,
+	                geometry: geometry,
 	                point: point,
 	                data: resource
 	            }));
@@ -1505,6 +1532,28 @@ return /******/ (function(modules) { // webpackBootstrap
 	    initialize: function initialize(options) {
 	        this.options = options || {};
 	        extend(this, this.options);
+	    },
+
+	    getStyle: function getStyle(options) {
+	        var geometry = options.geometry;
+	        var style;
+	        switch (geometry.type) {
+	            case 'Point':
+	                style = this.getMarkerStyle(options.resource, options);
+	            case 'MultiPoint':
+	                break;
+	            case 'LineString':
+	            case 'MultiLineString':
+	                style = this.getLineStyle(options.resource, options);
+	                break;
+	            case 'Polygon':
+	            case 'MultiPolygon':
+	                style = this.getPolygonStyle(options.resource, options);
+	                break;
+	            default:
+	                break;
+	        }
+	        return style;
 	    },
 
 	    /**
