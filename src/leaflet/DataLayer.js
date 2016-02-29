@@ -59,7 +59,7 @@ if (L.GridLayer) {
                     return tile;
                 },
 
-                _initContainer: function () {
+                _initContainer : function() {
                     L.TileLayer.prototype._initContainer.apply(this, arguments);
                     if (this.options.pane) {
                         var tilePane = this._map._panes[this.options.pane];
@@ -125,7 +125,6 @@ var DataLayer = ParentLayer.extend({
 
         var pad = this._getTilePad();
         var extendedBbox = this.expandBbox(bbox, pad);
-
         var size = Math.min(tileSize.x, tileSize.y);
 
         var resolution = this.options.resolution || 4;
@@ -248,8 +247,8 @@ var DataLayer = ParentLayer.extend({
         } else {
             top = right = bottom = left = pad;
         }
-        var sw = this._addOffset(bbox[0], [ -left, -bottom ]);
-        var ne = this._addOffset(bbox[1], [ right, top ]);
+        var sw = this._addOffset(bbox[0], [ -bottom, -left ]);
+        var ne = this._addOffset(bbox[1], [ top, right ]);
         return [ sw, ne ];
     },
 
@@ -265,20 +264,21 @@ var DataLayer = ParentLayer.extend({
 
     /** Returns the pad (in pixels) around a tile */
     _getTilePad : function() {
-        var tilePad = this.options.tilePad || this.options.getTilePad;
+        var tilePad = this.options.tilePad || this.options.getTilePad;
         var obj = this.options;
         if (!tilePad) {
             var style = this._getDataStyle();
             obj = style;
-            tilePad = style.tilePad || style.getTilePad;
-        };
-        if (typeof tilePad === 'function') {
+            tilePad = style.tilePad || style.getTilePad;
+        }
+        ;
+        if (typeof tilePad === 'function') {
             var zoom = this._map.getZoom();
             tilePad = tilePad.call(obj, zoom);
         }
-        if (!tilePad){
+        if (!tilePad) {
             var minSize = 64;
-            tilePad = [minSize, minSize, minSize, minSize];
+            tilePad = [ minSize, minSize, minSize, minSize ];
         }
         return tilePad
     },
@@ -341,7 +341,7 @@ var DataLayer = ParentLayer.extend({
         if (!slot)
             return;
 
-        var tile = slot.el /* v1.0.0-beta */ || slot /*  v0.7.7 */;
+        var tile = slot.el /* v1.0.0-beta */|| slot /* v0.7.7 */;
         if (!tile.context)
             return;
         var x = p.x % tileSize.x;
@@ -403,12 +403,12 @@ var DataLayer = ParentLayer.extend({
     _setMouseOver : function(set, ev) {
         set = !!set;
         if (this._mouseover !== set) {
-           this._mouseover = set;
-           if (this._mouseover){
-               this.fire('mouseenter', ev, this);
-           } else {
-               this.fire('mouseleave', ev, this);
-           }
+            this._mouseover = set;
+            if (this._mouseover) {
+                this.fire('mouseenter', ev, this);
+            } else {
+                this.fire('mouseleave', ev, this);
+            }
         }
     }
 

@@ -210,7 +210,6 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	        var pad = this._getTilePad();
 	        var extendedBbox = this.expandBbox(bbox, pad);
-
 	        var size = Math.min(tileSize.x, tileSize.y);
 
 	        var resolution = this.options.resolution || 4;
@@ -328,8 +327,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	        } else {
 	            top = right = bottom = left = pad;
 	        }
-	        var sw = this._addOffset(bbox[0], [-left, -bottom]);
-	        var ne = this._addOffset(bbox[1], [right, top]);
+	        var sw = this._addOffset(bbox[0], [-bottom, -left]);
+	        var ne = this._addOffset(bbox[1], [top, right]);
 	        return [sw, ne];
 	    },
 
@@ -351,7 +350,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	            var style = this._getDataStyle();
 	            obj = style;
 	            tilePad = style.tilePad || style.getTilePad;
-	        };
+	        }
+	        ;
 	        if (typeof tilePad === 'function') {
 	            var zoom = this._map.getZoom();
 	            tilePad = tilePad.call(obj, zoom);
@@ -420,7 +420,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        var slot = this._tiles[key];
 	        if (!slot) return;
 
-	        var tile = slot.el /* v1.0.0-beta */ || slot /*  v0.7.7 */;
+	        var tile = slot.el /* v1.0.0-beta */ || slot /* v0.7.7 */;
 	        if (!tile.context) return;
 	        var x = p.x % tileSize.x;
 	        var y = p.y % tileSize.y;
@@ -1997,7 +1997,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * This method transforms a bounding box into a key for RTree index.
 	     */
 	    _toIndexKey: function _toIndexKey(bbox) {
-	        return [+bbox[0][0], +bbox[0][1], +bbox[1][0], +bbox[1][1]];
+	        var a = +bbox[0][0],
+	            b = +bbox[0][1],
+	            c = +bbox[1][0],
+	            d = +bbox[1][1];
+	        return [Math.min(a, c), Math.min(b, d), Math.max(a, c), Math.max(b, d)];
 	    },
 
 	    /**

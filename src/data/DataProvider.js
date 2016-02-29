@@ -132,7 +132,8 @@ DataProvider.prototype = {
      * This method transforms a bounding box into a key for RTree index.
      */
     _toIndexKey : function(bbox) {
-        return [ +bbox[0][0], +bbox[0][1], +bbox[1][0], +bbox[1][1] ];
+        var a = +bbox[0][0], b = +bbox[0][1], c = +bbox[1][0], d = +bbox[1][1];
+        return [ Math.min(a, c), Math.min(b, d), Math.max(a, c), Math.max(b, d) ];
     },
 
     /**
