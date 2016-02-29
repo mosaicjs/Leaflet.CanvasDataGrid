@@ -564,7 +564,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	     */
 	    drawImage: function drawImage(image, position, options) {
 	        this._drawOnCanvasContext(options, function (g) {
-	            this._setCanvasStyles(g, options);
+	            this._setImageStyles(g, options);
 	            g.drawImage(image, position[0], position[1]);
 	            return true;
 	        });
@@ -578,16 +578,17 @@ return /******/ (function(modules) { // webpackBootstrap
 	     */
 	    drawLines: function drawLines(coords, options) {
 	        this._drawOnCanvasContext(options, function (g) {
+	            options = options || {};
 	            // Trace the line
-	            this._setCanvasStyles(g, options);
 	            g.beginPath();
 	            for (var i = 0; i < coords.length; i++) {
 	                // Simplify point sequence
 	                var segment = this._simplify(coords[i]);
 	                this._trace(g, segment);
 	            }
-	            g.stroke();
 	            g.closePath();
+	            this._setStrokeStyles(g, options);
+	            g.stroke();
 	        });
 	    },
 
@@ -597,7 +598,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    drawPolygon: function drawPolygon(polygon, options) {
 	        // Create new canvas where the polygon should be drawn
 	        this._drawOnCanvasContext(options, function (g) {
-	            this._setCanvasStyles(g, options);
+	            options = options || {};
 	            g.beginPath();
 	            for (var i = 0; i < polygon.length; i++) {
 	                var ring = this._simplify(polygon[i]);
@@ -609,9 +610,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	                }
 	                this._trace(g, ring);
 	            }
-	            g.fill();
-	            g.stroke();
 	            g.closePath();
+	            this._setFillStyles(g, options);
+	            g.fill();
+	            this._setStrokeStyles(g, options);
+	            g.stroke();
 	            return true;
 	        });
 	    },
@@ -651,20 +654,37 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    /**
-	     * Copies styles from the specified style object to the canvas context.
+	     * Copies fill styles from the specified style object to the canvas context.
 	     */
-	    _setCanvasStyles: function _setCanvasStyles(g, options) {
-	        if (!options) return;
-	        g.globalAlpha = options.globalAlpha || options.fillOpacity || options.lineOpacity || options.opacity || 1;
+	    _setFillStyles: function _setFillStyles(g, options) {
+	        var compositeOperation = options.compositeOperation || options.composition || 'source-over';
+	        g.globalCompositeOperation = compositeOperation; //
 	        g.fillStyle = options.fillColor || options.color;
 	        if (options.fillImage) {
 	            g.fillStyle = g.createPattern(options.fillImage, "repeat");
 	        }
+	        g.globalAlpha = options.fillOpacity || options.opacity || 0;
+	    },
+
+	    /**
+	     * Copies stroke styles from the specified style object to the canvas
+	     * context.
+	     */
+	    _setStrokeStyles: function _setStrokeStyles(g, options) {
+	        var compositeOperation = options.compositeOperation || options.composition || 'source-over';
+	        g.globalCompositeOperation = compositeOperation; //
+	        g.globalAlpha = options.stokeOpacity || options.lineOpacity || options.opacity || 0;
 	        g.strokeStyle = options.lineColor || options.color;
 	        g.lineWidth = options.lineWidth || options.width || 0;
 	        g.lineCap = options.lineCap || 'round'; // 'butt|round|square'
 	        g.lineJoin = options.lineJoin || 'round'; // 'miter|round|bevel'
+	    },
 
+	    /**
+	     * Copies image styles from the specified style object to the canvas
+	     * context.
+	     */
+	    _setImageStyles: function _setImageStyles(g, options) {
 	        var compositeOperation = options.compositeOperation || options.composition || 'source-over';
 	        g.globalCompositeOperation = compositeOperation; //
 	    },
