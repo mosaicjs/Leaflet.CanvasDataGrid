@@ -58,20 +58,21 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	var L = __webpack_require__(1);
 	L.DataLayer = __webpack_require__(2);
-	L.DataLayer.DataLayerStyle = __webpack_require__(9);
-	L.DataLayer.DataLayerTracker = __webpack_require__(11);
+	L.DataLayer.DataLayerStyle = __webpack_require__(10);
+	L.DataLayer.DataLayerTracker = __webpack_require__(12);
+	L.DataLayer.FocusLayer = __webpack_require__(15);
+
 	L.DataLayer.CanvasContext = __webpack_require__(3);
 	L.DataLayer.GeometryRenderer = __webpack_require__(7);
-	L.DataLayer.GeometryRendererStyle = __webpack_require__(10);
+	L.DataLayer.GeometryRendererStyle = __webpack_require__(11);
 
-	L.DataLayer.IDataProvider = __webpack_require__(12);
-	L.DataLayer.DataProvider = __webpack_require__(13);
+	L.DataLayer.IDataProvider = __webpack_require__(16);
+	L.DataLayer.DataProvider = __webpack_require__(17);
 
 	L.DataLayer.GeoJsonUtils = __webpack_require__(8);
-	L.DataLayer.GridIndex = __webpack_require__(15);
-	L.DataLayer.ImageGridIndex = __webpack_require__(16);
-	L.DataLayer.ImageUtils = __webpack_require__(17);
-
+	L.DataLayer.GridIndex = __webpack_require__(19);
+	L.DataLayer.ImageGridIndex = __webpack_require__(20);
+	L.DataLayer.ImageUtils = __webpack_require__(21);
 	module.exports = L.DataLayer;
 
 /***/ },
@@ -91,83 +92,25 @@ return /******/ (function(modules) { // webpackBootstrap
 	var GeometryRenderer = __webpack_require__(7);
 	var GeoJsonUtils = __webpack_require__(8);
 	var GeometryUtils = __webpack_require__(5);
+	var GridLayer = __webpack_require__(9);
 
 	/**
 	 * This layer draws data on canvas tiles.
 	 */
-	var ParentLayer;
-	if (L.GridLayer) {
-	    // for v1.0.0-beta2
-	    ParentLayer = L.GridLayer.extend({
-	        _loadTile: function _loadTile(tile, tilePoint) {
-	            tile._layer = this;
-	            tile._tilePoint = tilePoint;
-	            this._drawTile(tile, tilePoint);
-	            return tile;
-	        },
-	        _tileCoordsToKey: function _tileCoordsToKey(coords) {
-	            return coords.x + ':' + coords.y + ':' + coords.z;
-	        }
-	    });
-	} else {
-	    // for v0.7.7
-	    ParentLayer = L.TileLayer.extend({
-
-	        includes: L.Mixin.Events,
-
-	        _tileCoordsToBounds: function _tileCoordsToBounds(coords) {
-	            var map = this._map;
-	            var tileSize = this.getTileSize();
-	            var nwPoint = L.point(coords.x * tileSize.x, coords.y * tileSize.y);
-	            var sePoint = L.point(nwPoint.x + tileSize.x, nwPoint.y + tileSize.y);
-	            var nw = map.unproject(nwPoint, coords.z);
-	            var se = map.unproject(sePoint, coords.z);
-	            return new L.LatLngBounds(nw, se);
-	        },
-
-	        _tileCoordsToKey: function _tileCoordsToKey(coords) {
-	            return coords.x + ':' + coords.y;
-	        },
-
-	        getTileSize: function getTileSize() {
-	            // for v0.7.7
-	            var s = this._getTileSize();
-	            return new L.Point(s, s);
-	        },
-
-	        _loadTile: function _loadTile(tile, tilePoint) {
-	            tile._layer = this;
-	            tile._tilePoint = tilePoint;
-	            this._adjustTilePoint(tilePoint);
-	            this._drawTile(tile, tilePoint);
-	            this._tileOnLoad.call(tile);
-	            return tile;
-	        },
-
-	        _initContainer: function _initContainer() {
-	            L.TileLayer.prototype._initContainer.apply(this, arguments);
-	            if (this.options.pane) {
-	                var tilePane = this._map._panes[this.options.pane];
-	                tilePane.appendChild(this._container);
-	            }
-	        }
-
-	    });
-	}
-	var DataLayer = ParentLayer.extend({
+	var DataLayer = GridLayer.extend({
 	    options: {
 	        pane: 'overlayPane',
 	        reuseTiles: false
 	    },
 
 	    initialize: function initialize(options) {
-	        ParentLayer.prototype.initialize.apply(this, arguments);
+	        GridLayer.prototype.initialize.apply(this, arguments);
 	        options = L.setOptions(this, options);
 	        this._newCanvas = this._newCanvas.bind(this);
 	    },
 
 	    onAdd: function onAdd(map) {
-	        ParentLayer.prototype.onAdd.apply(this, arguments);
+	        GridLayer.prototype.onAdd.apply(this, arguments);
 	        this._map.on('mousemove', this._onMouseMove, this);
 	        this._map.on('click', this._onClick, this);
 	        this._map.on('zoomstart', this._onZoomStart, this);
@@ -179,7 +122,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this._map.off('zoomstart', this._onZoomStart, this);
 	        this._map.off('click', this._onClick, this);
 	        this._map.off('mousemove', this._onMouseMove, this);
-	        ParentLayer.prototype.onRemove.apply(this, arguments);
+	        GridLayer.prototype.onRemove.apply(this, arguments);
 	    },
 
 	    bindPopup: function bindPopup(popup) {
@@ -1463,6 +1406,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	        for (j = 0; j < coords.length; j++) for (k = 0; k < coords[j].length - wrapShrink; k++) callback(coords[j][k]);
 	    } else if (geometry.type === 'MultiPolygon') {
 	        for (j = 0; j < coords.length; j++) for (k = 0; k < coords[j].length; k++) for (l = 0; l < coords[j][k].length - 1; l++) callback(coords[j][k][l]);
+	    } else if (geometry.type === 'GeometryCollection') {
+	        var geoms = geometry.geometries;
+	        for (var i = 0, len = geoms.length; i < len; i++) {
+	            forEach(geoms[i], callback);
+	        }
 	    } else {
 	        throw new Error('Unknown Geometry Type');
 	    }
@@ -1495,7 +1443,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param callback.onPolygons
 	 *            called to notify about a list of polygons
 	 */
-	module.exports.forEachGeometry = function (geometry, callback) {
+	module.exports.forEachGeometry = function forEachGeometry(geometry, callback) {
 	    var coords = geometry.coordinates;
 	    switch (geometry.type) {
 	        case 'Point':
@@ -1522,7 +1470,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        case 'GeometryCollection':
 	            var geoms = geometry.geometries;
 	            for (var i = 0, len = geoms.length; i < len; i++) {
-	                drawGeometry(geoms[i]);
+	                forEachGeometry(geoms[i], callback);
 	            }
 	            break;
 	    }
@@ -1534,10 +1482,81 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	'use strict';
 
-	module.exports = __webpack_require__(10);
+	var L = __webpack_require__(1);
+
+	var GridLayer;
+	if (L.GridLayer) {
+	    // for v1.0.0-beta2
+	    GridLayer = L.GridLayer.extend({
+	        _loadTile: function _loadTile(tile, tilePoint) {
+	            tile._layer = this;
+	            tile._tilePoint = tilePoint;
+	            this._drawTile(tile, tilePoint);
+	            return tile;
+	        },
+	        _tileCoordsToKey: function _tileCoordsToKey(coords) {
+	            return coords.x + ':' + coords.y + ':' + coords.z;
+	        }
+	    });
+	} else {
+	    // for v0.7.7
+	    GridLayer = L.TileLayer.extend({
+
+	        includes: L.Mixin.Events,
+
+	        _tileCoordsToBounds: function _tileCoordsToBounds(coords) {
+	            var map = this._map;
+	            var tileSize = this.getTileSize();
+	            var nwPoint = L.point(coords.x * tileSize.x, //
+	            coords.y * tileSize.y);
+	            var sePoint = L.point(nwPoint.x + tileSize.x, //
+	            nwPoint.y + tileSize.y);
+	            var nw = map.unproject(nwPoint, coords.z);
+	            var se = map.unproject(sePoint, coords.z);
+	            return new L.LatLngBounds(nw, se);
+	        },
+
+	        _tileCoordsToKey: function _tileCoordsToKey(coords) {
+	            return coords.x + ':' + coords.y;
+	        },
+
+	        getTileSize: function getTileSize() {
+	            // for v0.7.7
+	            var s = this._getTileSize();
+	            return new L.Point(s, s);
+	        },
+
+	        _loadTile: function _loadTile(tile, tilePoint) {
+	            tile._layer = this;
+	            tile._tilePoint = tilePoint;
+	            this._adjustTilePoint(tilePoint);
+	            this._drawTile(tile, tilePoint);
+	            this._tileOnLoad.call(tile);
+	            return tile;
+	        },
+
+	        _initContainer: function _initContainer() {
+	            L.TileLayer.prototype._initContainer.apply(this, arguments);
+	            if (this.options.pane) {
+	                var tilePane = this._map._panes[this.options.pane];
+	                tilePane.appendChild(this._container);
+	            }
+	        }
+
+	    });
+	}
+	module.exports = GridLayer;
 
 /***/ },
 /* 10 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	module.exports = __webpack_require__(11);
+
+/***/ },
+/* 11 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -1620,49 +1639,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = GeometryRenderStyle;
 
 /***/ },
-/* 11 */
+/* 12 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
 	var L = __webpack_require__(1);
+	var Marker = __webpack_require__(13)(L.Marker);
+	var Utils = __webpack_require__(14);
 
-	var ParentType;
-	if (L.Layer) {
-	    // v1.0.0-beta2
-	    ParentType = L.Marker.extend({
-	        _getPane: function _getPane() {
-	            return this._map.getPane(this.options.pane);
-	        }
-	    });
-	    ParentType.throttle = L.Util.throttle;
-	} else {
-	    // v0.7.7
-	    ParentType = L.Marker.extend({
-	        includes: L.Mixin.Events,
-	        _getPane: function _getPane() {
-	            var panes = this._map.getPanes();
-	            return panes[this.options.pane];
-	        }
-	    });
-	    ParentType.throttle = function (f, time, context) {
-	        var timeoutId, that, args;
-	        return function () {
-	            that = context || this;
-	            args = [];
-	            for (var i = 0; i < arguments.length; i++) {
-	                args.push(arguments[i]);
-	            }
-	            if (timeoutId === undefined) {
-	                timeoutId = setTimeout(function () {
-	                    timeoutId = undefined;
-	                    return f.apply(that, args);
-	                }, time);
-	            }
-	        };
-	    };
-	}
-	var DataLayerTracker = ParentType.extend({
+	var DataLayerTracker = Marker.extend({
 	    options: {
 	        pane: 'markerPane'
 	    },
@@ -1674,11 +1660,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	        options = options || {
 	            clickable: false
 	        };
-	        ParentType.prototype.initialize.call(this, L.latLng(0, 0), options);
+	        Marker.prototype.initialize.call(this, L.latLng(0, 0), options);
 	        this.options.icon = L.divIcon({});
 	        var timeout = 50;
-	        this._refreshData = ParentType.throttle(this._refreshData, timeout * 2, this);
-	        this._refreshIcon = ParentType.throttle(this._refreshIcon, timeout, this);
+	        this._refreshData = Utils.throttle(this._refreshData, timeout * 2, this);
+	        this._refreshIcon = Utils.throttle(this._refreshIcon, timeout, this);
 	        this.setDataLayer(this.options.dataLayer);
 	    },
 
@@ -1687,7 +1673,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    onAdd: function onAdd(map) {
-	        ParentType.prototype.onAdd.apply(this, arguments);
+	        Marker.prototype.onAdd.apply(this, arguments);
 	        this._initIcon();
 	        this._map.on('mousemove zoomend moveend', this._onMove, this);
 	        this._map.on('click', this._onMapClicked, this);
@@ -1701,7 +1687,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        this._map.off('click', this._onMapClicked, this);
 	        this._map.off('mousemove zoomend moveend', this._onMove, this);
 	        this._removeIcon();
-	        ParentType.prototype.onRemove.apply(this, arguments);
+	        Marker.prototype.onRemove.apply(this, arguments);
 	    },
 
 	    // -----------------------------------------------------------------------
@@ -1845,7 +1831,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    _initIcon: function _initIcon() {
-	        ParentType.prototype._initIcon.apply(this, arguments);
+	        Marker.prototype._initIcon.apply(this, arguments);
 	        var pane = this._getPane();
 	        pane.appendChild(this._icon);
 	        this._icon.style.display = 'none';
@@ -1855,7 +1841,185 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = DataLayerTracker;
 
 /***/ },
-/* 12 */
+/* 13 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	var L = __webpack_require__(1);
+
+	function newLayer(Parent) {
+	    var Type;
+	    if (L.Layer) {
+	        // v1.0.0-beta2
+	        Type = Parent.extend({
+	            _getPane: function _getPane() {
+	                return this._map.getPane(this.options.pane);
+	            }
+	        });
+	    } else {
+	        // v0.7.7
+	        Type = Parent.extend({
+	            includes: L.Mixin.Events,
+	            _getPane: function _getPane() {
+	                var panes = this._map.getPanes();
+	                return panes[this.options.pane];
+	            }
+	        });
+	        Type.prototype.initialize = Type.prototype.initialize || function (options) {
+	            L.Util.setOptions(this, options);
+	        };
+	        Type.prototype.onAdd = Type.prototype.onAdd || function (map) {
+	            this._map = map;
+	        };
+	        Type.prototype.onRemove = Type.prototype.onRemove || function () {
+	            delete this._map;
+	        };
+	    }
+	    return Type;
+	}
+
+	module.exports = newLayer;
+
+/***/ },
+/* 14 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	var L = __webpack_require__(1);
+	var throttle = L.Util.throttle || function (f, time, context) {
+	    var timeoutId, that, args;
+	    return function () {
+	        that = context || this;
+	        args = [];
+	        for (var i = 0; i < arguments.length; i++) {
+	            args.push(arguments[i]);
+	        }
+	        if (timeoutId === undefined) {
+	            timeoutId = setTimeout(function () {
+	                timeoutId = undefined;
+	                return f.apply(that, args);
+	            }, time);
+	        }
+	    };
+	};
+
+	module.exports = {
+	    throttle: throttle
+	};
+
+/***/ },
+/* 15 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	var L = __webpack_require__(1);
+	var ParentType = __webpack_require__(13)(L.Layer || L.Class);
+	var Utils = __webpack_require__(14);
+	var GeoJsonUtils = __webpack_require__(8);
+
+	var FocusLayer = ParentType.extend({
+
+	    options: {
+	        geometry: function geometry(d) {
+	            return d.geometry;
+	        }
+	    },
+
+	    initialize: function initialize(options) {
+	        options = options || {
+	            clickable: false
+	        };
+	        var timeout = 50;
+	        this._onDataUpdate = Utils.throttle(this._onDataUpdate, timeout, this);
+	    },
+
+	    onAdd: function onAdd(map) {
+	        ParentType.prototype.onAdd.apply(this, arguments);
+	        this._map = map;
+	        this.on('updatedata', this._onDataUpdate, this);
+	        this.setData(this.options.data);
+	    },
+
+	    onRemove: function onRemove(map) {
+	        this.off('updatedata', this._onDataUpdate, this);
+	        delete this._map;
+	        ParentType.prototype.onRemove.apply(this, arguments);
+	    },
+
+	    // -----------------------------------------------------------------------
+
+	    getData: function getData() {
+	        return this._data;
+	    },
+
+	    setData: function setData(data) {
+	        this._data = data || [];
+	        this.fire('updatedata', {
+	            target: this,
+	            data: this._data
+	        });
+	        return this;
+	    },
+
+	    // -----------------------------------------------------------------------
+	    // Zooms to fit with data
+
+	    _getGeometry: function _getGeometry(d) {
+	        return this.options.geometry(d);
+	    },
+
+	    _onDataUpdate: function _onDataUpdate(ev) {
+	        var getGeometry = this._getGeometry.bind(this);
+	        var data = this._data || [];
+	        var bbox = GeoJsonUtils.getBoundingBox({
+	            type: 'GeometryCollection',
+	            geometries: data.map(getGeometry)
+	        });
+	        if (!this._notDefined(bbox) && !this._equal(bbox, this._bbox)) {
+	            if (this._isEmpty(bbox)) {
+	                this._map.setView(L.latLng(bbox[0][1], bbox[0][0]));
+	            } else {
+	                var bounds = L.latLngBounds( //
+	                L.latLng(bbox[0][1], bbox[0][0]), //
+	                L.latLng(bbox[1][1], bbox[1][0]) //
+	                );
+	                this._map.fitBounds(bounds);
+	            }
+	        }
+	        this._bbox = bbox;
+	    },
+
+	    _equal: function _equal(first, second) {
+	        if (first === second) return true;
+	        if (!first || !second) return false;
+	        if (first[0] === second[0] && first[1] === second[1]) return true;
+	        if (first[0][0] === second[0][0] //
+	         && first[0][1] === second[0][1] //
+	         && first[1][0] === second[1][0] //
+	         && first[1][1] === second[1][1]) return true;
+	        return false;
+	    },
+
+	    _notDefined: function _notDefined(bbox) {
+	        if (!bbox) return true;
+	        if (!bbox[0] || !bbox[1]) return true;
+	        if (bbox[0][0] === Infinity || bbox[0][1] === Infinity || bbox[1][0] === Infinity || bbox[1][1] === Infinity) return true;
+	        return false;
+	    },
+
+	    _isEmpty: function _isEmpty(bbox) {
+	        if (bbox[0][0] === bbox[1][0] || bbox[0][1] === bbox[1][1]) return true;
+	        return false;
+	    }
+
+	});
+	module.exports = FocusLayer;
+
+/***/ },
+/* 16 */
 /***/ function(module, exports) {
 
 	/**
@@ -1883,12 +2047,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = IDataProvider;
 
 /***/ },
-/* 13 */
+/* 17 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var rbush = __webpack_require__(14);
+	var rbush = __webpack_require__(18);
 	var GeoJsonUtils = __webpack_require__(8);
 	var GeometryUtils = __webpack_require__(5);
 
@@ -2042,7 +2206,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = DataProvider;
 
 /***/ },
-/* 14 */
+/* 18 */
 /***/ function(module, exports, __webpack_require__) {
 
 	var __WEBPACK_AMD_DEFINE_RESULT__;/*
@@ -2669,7 +2833,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 15 */
+/* 19 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -2773,12 +2937,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = GridIndex;
 
 /***/ },
-/* 16 */
+/* 20 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var GridIndex = __webpack_require__(15);
+	var GridIndex = __webpack_require__(19);
 	var extend = __webpack_require__(4);
 
 	function ImageGridIndex() {
@@ -2924,7 +3088,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = ImageGridIndex;
 
 /***/ },
-/* 17 */
+/* 21 */
 /***/ function(module, exports) {
 
 	"use strict";

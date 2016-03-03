@@ -3,86 +3,25 @@ var CanvasContext = require('../canvas/CanvasContext');
 var GeometryRenderer = require('../canvas/GeometryRenderer');
 var GeoJsonUtils = require('../data/GeoJsonUtils');
 var GeometryUtils = require('../data/GeometryUtils');
+var GridLayer = require('./compatibility/GridLayer');
 
 /**
  * This layer draws data on canvas tiles.
  */
-var ParentLayer;
-if (L.GridLayer) {
-    // for v1.0.0-beta2
-    ParentLayer = L.GridLayer.extend({
-        _loadTile : function(tile, tilePoint) {
-            tile._layer = this;
-            tile._tilePoint = tilePoint;
-            this._drawTile(tile, tilePoint);
-            return tile;
-        },
-        _tileCoordsToKey : function(coords) {
-            return coords.x + ':' + coords.y + ':' + coords.z;
-        },
-    });
-} else {
-    // for v0.7.7
-    ParentLayer = L.TileLayer
-            .extend({
-
-                includes : L.Mixin.Events,
-
-                _tileCoordsToBounds : function(coords) {
-                    var map = this._map;
-                    var tileSize = this.getTileSize();
-                    var nwPoint = L.point(coords.x * tileSize.x, coords.y
-                            * tileSize.y);
-                    var sePoint = L.point(nwPoint.x + tileSize.x, nwPoint.y
-                            + tileSize.y);
-                    var nw = map.unproject(nwPoint, coords.z);
-                    var se = map.unproject(sePoint, coords.z);
-                    return new L.LatLngBounds(nw, se);
-                },
-
-                _tileCoordsToKey : function(coords) {
-                    return coords.x + ':' + coords.y;
-                },
-
-                getTileSize : function() {
-                    // for v0.7.7
-                    var s = this._getTileSize();
-                    return new L.Point(s, s);
-                },
-
-                _loadTile : function(tile, tilePoint) {
-                    tile._layer = this;
-                    tile._tilePoint = tilePoint;
-                    this._adjustTilePoint(tilePoint);
-                    this._drawTile(tile, tilePoint);
-                    this._tileOnLoad.call(tile);
-                    return tile;
-                },
-
-                _initContainer : function() {
-                    L.TileLayer.prototype._initContainer.apply(this, arguments);
-                    if (this.options.pane) {
-                        var tilePane = this._map._panes[this.options.pane];
-                        tilePane.appendChild(this._container);
-                    }
-                }
-
-            });
-}
-var DataLayer = ParentLayer.extend({
+var DataLayer = GridLayer.extend({
     options : {
         pane : 'overlayPane',
         reuseTiles : false
     },
 
     initialize : function(options) {
-        ParentLayer.prototype.initialize.apply(this, arguments);
+        GridLayer.prototype.initialize.apply(this, arguments);
         options = L.setOptions(this, options);
         this._newCanvas = this._newCanvas.bind(this);
     },
 
     onAdd : function(map) {
-        ParentLayer.prototype.onAdd.apply(this, arguments);
+        GridLayer.prototype.onAdd.apply(this, arguments);
         this._map.on('mousemove', this._onMouseMove, this);
         this._map.on('click', this._onClick, this);
         this._map.on('zoomstart', this._onZoomStart, this);
@@ -94,7 +33,7 @@ var DataLayer = ParentLayer.extend({
         this._map.off('zoomstart', this._onZoomStart, this);
         this._map.off('click', this._onClick, this);
         this._map.off('mousemove', this._onMouseMove, this);
-        ParentLayer.prototype.onRemove.apply(this, arguments);
+        GridLayer.prototype.onRemove.apply(this, arguments);
     },
 
     bindPopup : function(popup) {

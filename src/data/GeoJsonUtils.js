@@ -20,6 +20,11 @@ module.exports.forEachCoordinate = function forEach(geometry, callback) {
             for (k = 0; k < coords[j].length; k++)
                 for (l = 0; l < coords[j][k].length - 1; l++)
                     callback(coords[j][k][l]);
+    } else if (geometry.type === 'GeometryCollection') {
+        var geoms = geometry.geometries;
+        for (var i = 0, len = geoms.length; i < len; i++) {
+            forEach(geoms[i], callback);
+        }
     } else {
         throw new Error('Unknown Geometry Type');
     }
@@ -56,7 +61,7 @@ module.exports.getBoundingBox = function(geometry) {
  * @param callback.onPolygons
  *            called to notify about a list of polygons
  */
-module.exports.forEachGeometry = function(geometry, callback) {
+module.exports.forEachGeometry = function forEachGeometry(geometry, callback) {
     var coords = geometry.coordinates;
     switch (geometry.type) {
     case 'Point':
@@ -83,7 +88,7 @@ module.exports.forEachGeometry = function(geometry, callback) {
     case 'GeometryCollection':
         var geoms = geometry.geometries;
         for (var i = 0, len = geoms.length; i < len; i++) {
-            drawGeometry(geoms[i]);
+            forEachGeometry(geoms[i], callback);
         }
         break;
     }

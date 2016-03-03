@@ -1,41 +1,8 @@
 var L = require('leaflet');
+var Marker = require('./compatibility/Layer')(L.Marker);
+var Utils = require('./compatibility/Utils');
 
-var ParentType;
-if (L.Layer) {
-    // v1.0.0-beta2
-    ParentType = L.Marker.extend({
-        _getPane : function() {
-            return this._map.getPane(this.options.pane);
-        },
-    });
-    ParentType.throttle = L.Util.throttle;
-} else {
-    // v0.7.7
-    ParentType = L.Marker.extend({
-        includes : L.Mixin.Events,
-        _getPane : function() {
-            var panes = this._map.getPanes();
-            return panes[this.options.pane];
-        }
-    });
-    ParentType.throttle = function(f, time, context) {
-        var timeoutId, that, args;
-        return function() {
-            that = context || this;
-            args = [];
-            for (var i = 0; i < arguments.length; i++) {
-                args.push(arguments[i]);
-            }
-            if (timeoutId === undefined) {
-                timeoutId = setTimeout(function() {
-                    timeoutId = undefined;
-                    return f.apply(that, args);
-                }, time);
-            }
-        };
-    }
-}
-var DataLayerTracker = ParentType.extend({
+var DataLayerTracker = Marker.extend({
     options : {
         pane : 'markerPane',
     // interactive: false,
@@ -47,13 +14,13 @@ var DataLayerTracker = ParentType.extend({
         options = options || {
             clickable : false
         };
-        ParentType.prototype.initialize.call(this, L.latLng(0, 0), options);
+        Marker.prototype.initialize.call(this, L.latLng(0, 0), options);
         this.options.icon = L.divIcon({
         });
         var timeout = 50;
-        this._refreshData = ParentType.throttle(this._refreshData, timeout * 2,
+        this._refreshData = Utils.throttle(this._refreshData, timeout * 2,
                 this);
-        this._refreshIcon = ParentType.throttle(this._refreshIcon, timeout,
+        this._refreshIcon = Utils.throttle(this._refreshIcon, timeout,
                 this);
         this.setDataLayer(this.options.dataLayer);
     },
@@ -63,7 +30,7 @@ var DataLayerTracker = ParentType.extend({
     },
 
     onAdd : function(map) {
-        ParentType.prototype.onAdd.apply(this, arguments);
+        Marker.prototype.onAdd.apply(this, arguments);
         this._initIcon();
         this._map.on('mousemove zoomend moveend', this._onMove, this);
         this._map.on('click', this._onMapClicked, this);
@@ -77,7 +44,7 @@ var DataLayerTracker = ParentType.extend({
         this._map.off('click', this._onMapClicked, this);
         this._map.off('mousemove zoomend moveend', this._onMove, this);
         this._removeIcon();
-        ParentType.prototype.onRemove.apply(this, arguments);
+        Marker.prototype.onRemove.apply(this, arguments);
     },
 
     // -----------------------------------------------------------------------
@@ -228,7 +195,7 @@ var DataLayerTracker = ParentType.extend({
     },
 
     _initIcon : function() {
-          ParentType.prototype._initIcon.apply(this, arguments);
+        Marker.prototype._initIcon.apply(this, arguments);
           var pane = this._getPane();
   			  pane.appendChild(this._icon);
   		  this._icon.style.display = 'none';
