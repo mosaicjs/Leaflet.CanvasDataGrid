@@ -76,19 +76,16 @@ extend(CanvasContext.prototype, IGridIndex.prototype, {
     /**
      * Draws a line defined by the specified sequence of points.
      */
-    drawLines : function(coords, options) {
+    drawLine : function(coords, options) {
         this._drawOnCanvasContext(options, function(g) {
             options = options || {};
-            // Trace the line
+            // Simplify point sequence
+            var segment = this._simplify(coords);
             g.beginPath();
-            for (var i = 0; i < coords.length; i++) {
-                // Simplify point sequence
-                var segment = this._simplify(coords[i]);
-                this._trace(g, segment);
-            }
-            g.closePath();
+            this._trace(g, segment);
             this._setStrokeStyles(g, options);
             g.stroke();
+            g.closePath();
         });
     },
 

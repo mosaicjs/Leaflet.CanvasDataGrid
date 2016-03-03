@@ -229,7 +229,8 @@ var DataLayer = GridLayer.extend({
     },
 
     _getDataStyles : function() {
-        var styles = this.options.styles || [ this.options.style ];
+        var styles = this.options.styles || this.options.style;
+        styles = Array.isArray(styles) ? styles : !!styles ? [ styles ] : [];
         return styles;
     },
 

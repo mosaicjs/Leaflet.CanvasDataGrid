@@ -30,17 +30,20 @@ extend(GeometryRenderer.prototype, {
      * @param styles
      *            style provider defining how features should be visualized
      */
-    drawFeature : function(resource, styles, options) {
+    drawFeature : function(resource, getStyles, options) {
         var that = this;
         var geometry = this._getGeometry(resource, options);
         if (!geometry)
             return;
-        if (typeof styles !== 'function' && typeof styles.getStyle === 'function') {
-            styles = styles.getStyle.bind(styles);
+        if (typeof getStyles !== 'function'
+                && typeof getStyles.getStyle === 'function') {
+            getStyles = getStyles.getStyle.bind(getStyles);
         }
-        if (typeof styles !== 'function') {
-            var s = styles;
-            styles = function(){ return s; }
+        if (typeof getStyles !== 'function') {
+            var s = getStyles;
+            getStyles = function() {
+                return s;
+            }
         }
         return GeoJsonUtils.forEachGeometry(geometry, {
             onPoints : function(points) {
@@ -53,13 +56,12 @@ extend(GeometryRenderer.prototype, {
                 }
             },
             onLines : function(lines) {
-                var lineStyle = styles(extend({},
-                        options, {
-                            resource : resource,
-                            geometry : geometry,
-                            coords : lines,
-                            data : resource
-                        }));
+                var lineStyle = getStyles(extend({}, options, {
+                    resource : resource,
+                    geometry : geometry,
+                    coords : lines,
+                    data : resource
+                }));
                 if (!lineStyle)
                     return;
                 var segments = [];
@@ -67,9 +69,17 @@ extend(GeometryRenderer.prototype, {
                     var segment = that._prepareLineCoordinates(lines[i]);
                     segments.push(segment);
                 }
-                that.context.drawLines(segments, extend({
-                    data : resource
-                }, lineStyle));
+                var stylesArray = Array.isArray(lineStyle) ? lineStyle
+                        : [ lineStyle ];
+                for (var j = 0; j < stylesArray.length; j++) {
+                    var style = stylesArray[j];
+                    for (var i = 0; i < segments.length; i++) {
+                        var segment = segments[i];
+                        that.context.drawLine(segment, extend({
+                            data : resource
+                        }, style));
+                    }
+                }
                 // _drawMarker([ 0, 0 ]);
             },
             onPolygons : function(polygons) {
@@ -78,13 +88,12 @@ extend(GeometryRenderer.prototype, {
                 }
             },
             _onPolygon : function(polygon) {
-                var polygonStyle = styles(extend({},
-                        options, {
-                            resource : resource,
-                            geometry : geometry,
-                            coords : polygon,
-                            data : resource
-                        }));
+                var polygonStyle = getStyles(extend({}, options, {
+                    resource : resource,
+                    geometry : geometry,
+                    coords : polygon,
+                    data : resource
+                }));
                 if (!polygonStyle)
                     return;
                 var coords = [];
@@ -94,21 +103,25 @@ extend(GeometryRenderer.prototype, {
                         coords.push(ring);
                     }
                 }
-                that.context.drawPolygon(coords, extend({
-                    data : resource
-                }, polygonStyle));
+                var stylesArray = Array.isArray(polygonStyle) ? polygonStyle
+                        : [ polygonStyle ];
+                for (var i = 0; i < stylesArray.length; i++) {
+                    var style = stylesArray[i];
+                    that.context.drawPolygon(coords, extend({
+                        data : resource
+                    }, style));
+                }
                 // _drawMarker([ 0, 0 ]);
             }
         });
 
         function _drawMarker(point) {
-            var markerStyle = styles(extend({},
-                    options, {
-                        resource : resource,
-                        geometry : geometry,
-                        point : point,
-                        data : resource
-                    }));
+            var markerStyle = getStyles(extend({}, options, {
+                resource : resource,
+                geometry : geometry,
+                point : point,
+                data : resource
+            }));
             if (!markerStyle || !markerStyle.image)
                 return;
 

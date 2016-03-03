@@ -313,7 +313,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    _getDataStyles: function _getDataStyles() {
-	        var styles = this.options.styles || [this.options.style];
+	        var styles = this.options.styles || this.options.style;
+	        styles = Array.isArray(styles) ? styles : !!styles ? [styles] : [];
 	        return styles;
 	    },
 
@@ -519,19 +520,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	    /**
 	     * Draws a line defined by the specified sequence of points.
 	     */
-	    drawLines: function drawLines(coords, options) {
+	    drawLine: function drawLine(coords, options) {
 	        this._drawOnCanvasContext(options, function (g) {
 	            options = options || {};
-	            // Trace the line
+	            // Simplify point sequence
+	            var segment = this._simplify(coords);
 	            g.beginPath();
-	            for (var i = 0; i < coords.length; i++) {
-	                // Simplify point sequence
-	                var segment = this._simplify(coords[i]);
-	                this._trace(g, segment);
-	            }
-	            g.closePath();
+	            this._trace(g, segment);
 	            this._setStrokeStyles(g, options);
 	            g.stroke();
+	            g.closePath();
 	        });
 	    },
 
@@ -1229,16 +1227,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	     * @param styles
 	     *            style provider defining how features should be visualized
 	     */
-	    drawFeature: function drawFeature(resource, styles, options) {
+	    drawFeature: function drawFeature(resource, getStyles, options) {
 	        var that = this;
 	        var geometry = this._getGeometry(resource, options);
 	        if (!geometry) return;
-	        if (typeof styles !== 'function' && typeof styles.getStyle === 'function') {
-	            styles = styles.getStyle.bind(styles);
+	        if (typeof getStyles !== 'function' && typeof getStyles.getStyle === 'function') {
+	            getStyles = getStyles.getStyle.bind(getStyles);
 	        }
-	        if (typeof styles !== 'function') {
-	            var s = styles;
-	            styles = function () {
+	        if (typeof getStyles !== 'function') {
+	            var s = getStyles;
+	            getStyles = function () {
 	                return s;
 	            };
 	        }
@@ -1253,7 +1251,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                }
 	            },
 	            onLines: function onLines(lines) {
-	                var lineStyle = styles(extend({}, options, {
+	                var lineStyle = getStyles(extend({}, options, {
 	                    resource: resource,
 	                    geometry: geometry,
 	                    coords: lines,
@@ -1265,9 +1263,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	                    var segment = that._prepareLineCoordinates(lines[i]);
 	                    segments.push(segment);
 	                }
-	                that.context.drawLines(segments, extend({
-	                    data: resource
-	                }, lineStyle));
+	                var stylesArray = Array.isArray(lineStyle) ? lineStyle : [lineStyle];
+	                for (var j = 0; j < stylesArray.length; j++) {
+	                    var style = stylesArray[j];
+	                    for (var i = 0; i < segments.length; i++) {
+	                        var segment = segments[i];
+	                        that.context.drawLine(segment, extend({
+	                            data: resource
+	                        }, style));
+	                    }
+	                }
 	                // _drawMarker([ 0, 0 ]);
 	            },
 	            onPolygons: function onPolygons(polygons) {
@@ -1276,7 +1281,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	                }
 	            },
 	            _onPolygon: function _onPolygon(polygon) {
-	                var polygonStyle = styles(extend({}, options, {
+	                var polygonStyle = getStyles(extend({}, options, {
 	                    resource: resource,
 	                    geometry: geometry,
 	                    coords: polygon,
@@ -1290,15 +1295,19 @@ return /******/ (function(modules) { // webpackBootstrap
 	                        coords.push(ring);
 	                    }
 	                }
-	                that.context.drawPolygon(coords, extend({
-	                    data: resource
-	                }, polygonStyle));
+	                var stylesArray = Array.isArray(polygonStyle) ? polygonStyle : [polygonStyle];
+	                for (var i = 0; i < stylesArray.length; i++) {
+	                    var style = stylesArray[i];
+	                    that.context.drawPolygon(coords, extend({
+	                        data: resource
+	                    }, style));
+	                }
 	                // _drawMarker([ 0, 0 ]);
 	            }
 	        });
 
 	        function _drawMarker(point) {
-	            var markerStyle = styles(extend({}, options, {
+	            var markerStyle = getStyles(extend({}, options, {
 	                resource: resource,
 	                geometry: geometry,
 	                point: point,
