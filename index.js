@@ -1,4 +1,6 @@
 var L = require('leaflet');
+require('./src/leaflet/compatibility/Utils');
+
 L.DataLayer = require('./src/leaflet/DataLayer');
 L.DataLayer.DataLayerStyle = require('./src/leaflet/DataLayerStyle');
 L.DataLayer.DataLayerTracker = require('./src/leaflet/DataLayerTracker');

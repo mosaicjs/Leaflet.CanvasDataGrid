@@ -63,7 +63,7 @@ var FocusLayer = ParentType.extend({
         });
         if (!this._notDefined(bbox) && !this._equal(bbox, this._bbox)) {
             if (this._isEmpty(bbox)) {
-                this._map.setView(L.latLng(bbox[0][1], bbox[0][0]));
+                this._map.panTo(L.latLng(bbox[0][1], bbox[0][0]));
             } else {
                 var bounds = L.latLngBounds(//
                 L.latLng(bbox[0][1], bbox[0][0]), //

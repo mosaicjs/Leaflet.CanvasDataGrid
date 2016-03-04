@@ -1,5 +1,5 @@
 var L = require('leaflet');
-var throttle = L.Util.throttle || function(f, time, context) {
+L.Util.throttle = L.Util.throttle || function(f, time, context) {
     var timeoutId, that, args;
     return function() {
         that = context || this;
@@ -17,5 +17,5 @@ var throttle = L.Util.throttle || function(f, time, context) {
 };
 
 module.exports = {
-    throttle : throttle
+    throttle : L.Util.throttle
 };

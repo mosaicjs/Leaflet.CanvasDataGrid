@@ -57,19 +57,21 @@ return /******/ (function(modules) { // webpackBootstrap
 	'use strict';
 
 	var L = __webpack_require__(1);
-	L.DataLayer = __webpack_require__(2);
-	L.DataLayer.DataLayerStyle = __webpack_require__(10);
-	L.DataLayer.DataLayerTracker = __webpack_require__(12);
+	__webpack_require__(2);
+
+	L.DataLayer = __webpack_require__(3);
+	L.DataLayer.DataLayerStyle = __webpack_require__(11);
+	L.DataLayer.DataLayerTracker = __webpack_require__(13);
 	L.DataLayer.FocusLayer = __webpack_require__(15);
 
-	L.DataLayer.CanvasContext = __webpack_require__(3);
-	L.DataLayer.GeometryRenderer = __webpack_require__(7);
-	L.DataLayer.GeometryRendererStyle = __webpack_require__(11);
+	L.DataLayer.CanvasContext = __webpack_require__(4);
+	L.DataLayer.GeometryRenderer = __webpack_require__(8);
+	L.DataLayer.GeometryRendererStyle = __webpack_require__(12);
 
 	L.DataLayer.IDataProvider = __webpack_require__(16);
 	L.DataLayer.DataProvider = __webpack_require__(17);
 
-	L.DataLayer.GeoJsonUtils = __webpack_require__(8);
+	L.DataLayer.GeoJsonUtils = __webpack_require__(9);
 	L.DataLayer.GridIndex = __webpack_require__(19);
 	L.DataLayer.ImageGridIndex = __webpack_require__(20);
 	L.DataLayer.ImageUtils = __webpack_require__(21);
@@ -88,11 +90,39 @@ return /******/ (function(modules) { // webpackBootstrap
 	'use strict';
 
 	var L = __webpack_require__(1);
-	var CanvasContext = __webpack_require__(3);
-	var GeometryRenderer = __webpack_require__(7);
-	var GeoJsonUtils = __webpack_require__(8);
-	var GeometryUtils = __webpack_require__(5);
-	var GridLayer = __webpack_require__(9);
+	L.Util.throttle = L.Util.throttle || function (f, time, context) {
+	    var timeoutId, that, args;
+	    return function () {
+	        that = context || this;
+	        args = [];
+	        for (var i = 0; i < arguments.length; i++) {
+	            args.push(arguments[i]);
+	        }
+	        if (timeoutId === undefined) {
+	            timeoutId = setTimeout(function () {
+	                timeoutId = undefined;
+	                return f.apply(that, args);
+	            }, time);
+	        }
+	    };
+	};
+
+	module.exports = {
+	    throttle: L.Util.throttle
+	};
+
+/***/ },
+/* 3 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	var L = __webpack_require__(1);
+	var CanvasContext = __webpack_require__(4);
+	var GeometryRenderer = __webpack_require__(8);
+	var GeoJsonUtils = __webpack_require__(9);
+	var GeometryUtils = __webpack_require__(6);
+	var GridLayer = __webpack_require__(10);
 
 	/**
 	 * This layer draws data on canvas tiles.
@@ -334,25 +364,25 @@ return /******/ (function(modules) { // webpackBootstrap
 	    // -----------------------------------------------------------------------
 
 	    _onZoomStart: function _onZoomStart(ev) {
-	        if (this._cleanupId) {
-	            clearTimeout(this._cleanupId);
-	            delete this._cleanupId;
-	        }
+	        //        if (this._cleanupId) {
+	        //            clearTimeout(this._cleanupId);
+	        //            delete this._cleanupId;
+	        //        }
 	    },
 	    _onZoomEnd: function _onZoomEnd(ev) {
-	        if (this._cleanupId) {
-	            clearTimeout(this._cleanupId);
-	            delete this._cleanupId;
-	        }
-	        this._cleanupId = setTimeout((function () {
-	            var zoom = this._map.getZoom();
-	            for (var z in this._levels) {
-	                if (+z !== zoom) {
-	                    L.DomUtil.remove(this._levels[z].el);
-	                    delete this._levels[z];
-	                }
-	            }
-	        }).bind(this), 200);
+	        //        if (this._cleanupId) {
+	        //            clearTimeout(this._cleanupId);
+	        //            delete this._cleanupId;
+	        //        }
+	        //        this._cleanupId = setTimeout(function() {
+	        //            var zoom = this._map.getZoom();
+	        //            for ( var z in this._levels) {
+	        //                if (+z !== zoom) {
+	        //                    L.DomUtil.remove(this._levels[z].el);
+	        //                    delete this._levels[z];
+	        //                }
+	        //            }
+	        //        }.bind(this), 200);
 	    },
 
 	    _isTransparent: function _isTransparent(latlng) {
@@ -372,11 +402,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	    },
 
 	    _onClick: function _onClick(ev) {
-	        if (!this._isTransparent(ev.latlng)) {
-	            ev.target = this;
-	            ev.map = this._map;
-	            this.fire('click', ev);
-	        }
+	        //        if (!this._isTransparent(ev.latlng)) {
+	        ev.target = this;
+	        ev.map = this._map;
+	        this.fire('click', ev);
+	        //        }
 	    },
 
 	    // -----------------------------------------------------------------------
@@ -437,14 +467,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = DataLayer;
 
 /***/ },
-/* 3 */
+/* 4 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var extend = __webpack_require__(4);
-	var GeometryUtils = __webpack_require__(5);
-	var IGridIndex = __webpack_require__(6);
+	var extend = __webpack_require__(5);
+	var GeometryUtils = __webpack_require__(6);
+	var IGridIndex = __webpack_require__(7);
 
 	/**
 	 * This class provides a set of utility methods simplifying data visualization
@@ -663,7 +693,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = CanvasContext;
 
 /***/ },
-/* 4 */
+/* 5 */
 /***/ function(module, exports) {
 
 	"use strict";
@@ -682,7 +712,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 
 /***/ },
-/* 5 */
+/* 6 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -1154,7 +1184,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 
 /***/ },
-/* 6 */
+/* 7 */
 /***/ function(module, exports) {
 
 	"use strict";
@@ -1190,14 +1220,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 
 /***/ },
-/* 7 */
+/* 8 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var extend = __webpack_require__(4);
-	var GeometryUtils = __webpack_require__(5);
-	var GeoJsonUtils = __webpack_require__(8);
+	var extend = __webpack_require__(5);
+	var GeometryUtils = __webpack_require__(6);
+	var GeoJsonUtils = __webpack_require__(9);
 
 	/**
 	 * A common interface visualizing data on canvas.
@@ -1395,7 +1425,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = GeometryRenderer;
 
 /***/ },
-/* 8 */
+/* 9 */
 /***/ function(module, exports) {
 
 	/**
@@ -1486,7 +1516,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 
 /***/ },
-/* 9 */
+/* 10 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -1557,20 +1587,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = GridLayer;
 
 /***/ },
-/* 10 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	module.exports = __webpack_require__(11);
-
-/***/ },
 /* 11 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
-	var extend = __webpack_require__(4);
+	module.exports = __webpack_require__(12);
+
+/***/ },
+/* 12 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	var extend = __webpack_require__(5);
 
 	function GeometryRenderStyle(options) {
 	    this.initialize(options);
@@ -1648,209 +1678,94 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = GeometryRenderStyle;
 
 /***/ },
-/* 12 */
+/* 13 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
 	var L = __webpack_require__(1);
-	var Marker = __webpack_require__(13)(L.Marker);
-	var Utils = __webpack_require__(14);
+	var ParentType = __webpack_require__(14)(L.Layer || L.Class);
+	var Utils = __webpack_require__(2);
 
-	var DataLayerTracker = Marker.extend({
+	var DataLayerTracker = ParentType.extend({
 	    options: {
-	        pane: 'markerPane'
+	        radius: 32,
+	        timeout: 50
 	    },
 
-	    // interactive: false,
-	    // riseOnHover: true,
-	    // riseOffset: 250
 	    initialize: function initialize(options) {
-	        options = options || {
-	            clickable: false
-	        };
-	        Marker.prototype.initialize.call(this, L.latLng(0, 0), options);
-	        this.options.icon = L.divIcon({});
-	        var timeout = 50;
-	        this._refreshData = Utils.throttle(this._refreshData, timeout * 2, this);
-	        this._refreshIcon = Utils.throttle(this._refreshIcon, timeout, this);
+	        ParentType.prototype.initialize.call(this, options || {});
+	        var timeout = this.options.timeout;
+	        this._onClick = Utils.throttle(this._onClick, timeout, this);
+	        this._onMove = Utils.throttle(this._onMove, timeout, this);
 	        this.setDataLayer(this.options.dataLayer);
+	    },
+
+	    // -----------------------------------------------------------------------
+
+	    getDataLayer: function getDataLayer() {
+	        return this._dataLayer;
 	    },
 
 	    setDataLayer: function setDataLayer(layer) {
 	        this._dataLayer = layer;
+	        return this;
 	    },
 
+	    // -----------------------------------------------------------------------
+
 	    onAdd: function onAdd(map) {
-	        Marker.prototype.onAdd.apply(this, arguments);
-	        this._initIcon();
+	        ParentType.prototype.onAdd.apply(this, arguments);
 	        this._map.on('mousemove zoomend moveend', this._onMove, this);
-	        this._map.on('click', this._onMapClicked, this);
-	        this.on('popupopen', this._onPopupOpen, this);
-	        this.on('popupclose', this._onPopupClose, this);
+	        this._map.on('click', this._onClick, this);
 	    },
 
 	    onRemove: function onRemove(map) {
-	        this.off('popupclose', this._onPopupClose, this);
-	        this.off('popupopen', this._onPopupOpen, this);
-	        this._map.off('click', this._onMapClicked, this);
+	        this._map.off('click', this._onClick, this);
 	        this._map.off('mousemove zoomend moveend', this._onMove, this);
-	        this._removeIcon();
-	        Marker.prototype.onRemove.apply(this, arguments);
+	        ParentType.prototype.onRemove.apply(this, arguments);
 	    },
 
 	    // -----------------------------------------------------------------------
 
-	    _onPopupOpen: function _onPopupOpen(ev) {
-	        this._frozen = true;
-	    },
-
-	    _onPopupClose: function _onPopupClose(ev) {
-	        this._frozen = false;
-	        this._moveTo(this._lastPos);
-	    },
-
-	    _onMapClicked: function _onMapClicked(ev) {
-	        this._moveTo(ev.latlng, true);
+	    _onClick: function _onClick(ev) {
+	        this._fireDataEvent('click', ev);
 	    },
 
 	    _onMove: function _onMove(ev) {
-	        this._moveTo(ev.latlng);
-	    },
-
-	    _moveTo: function _moveTo(latlng, force) {
-	        this._lastPos = latlng || this._lastPos;
-	        if (this._frozen && !force) return;
-	        if (latlng) {
-	            this.setLatLng(latlng);
-	        }
-	        this._refreshData();
-	        this._refreshIcon();
+	        this._fireDataEvent('moveend', ev);
 	    },
 
 	    // -----------------------------------------------------------------------
 
-	    _refreshData: function _refreshData() {
-	        if (!this._latlng) return;
+	    _fireDataEvent: function _fireDataEvent(key, ev) {
+	        if (!ev.latlng || !this.hasEventListeners(key)) return;
 	        var radius = this._getRadius();
-	        var that = this;
-	        this._dataLayer.loadDataAround(this._latlng, [radius, radius], //
-	        function (err, data) {
-	            that._data = data;
-	            that._renderData();
-	        });
+	        this._dataLayer.loadDataAround(ev.latlng, [radius, radius], (function (err, data) {
+	            ev.err = err;
+	            ev.data = data;
+	            this.fire(key, ev);
+	        }).bind(this));
 	    },
-
-	    _renderData: function _renderData() {
-	        var data = this.getData();
-	        var element = this.getElement();
-	        element.innerHTML = '';
-	        var elm = L.DomUtil.create('div', '', element);
-	        elm.innerHTML = data.length + '';
-	        var style = this._getTooltipStyle(elm, data);
-	        L.Util.extend(elm.style, style);
-	    },
-
-	    _refreshIcon: function _refreshIcon() {
-	        var elm = this.getElement();
-	        var style = this._getTrackerStyle(elm, this.getData());
-	        L.Util.extend(elm.style, style);
-	    },
-
-	    // -----------------------------------------------------------------------
-
-	    getElement: function getElement() {
-	        return this._icon;
-	    },
-
-	    // -----------------------------------------------------------------------
-
-	    getData: function getData() {
-	        return this._data;
-	    },
-
-	    // -----------------------------------------------------------------------
 
 	    _getRadius: function _getRadius() {
-	        if (!this._r) {
-	            var r = typeof this.options.radius === 'function' ? //
-	            this.options.radius //
-	            : function (zoom) {
-	                return this.options.radius || 40;
-	            };
-	            this._r = r.bind(this);
+	        if (!this._radius) {
+	            var r = this.options.radius || this.options.getRadius;
+	            this._radius = (typeof r === 'function' ? r : function (zoom) {
+	                return r || 32;
+	            }).bind(this);
 	        }
 	        var zoom = this._map.getZoom();
-	        return this._r(zoom);
-	    },
-
-	    _getTooltipStyle: function _getTooltipStyle(elm, data) {
-	        return this._getStyle('tooltipStyle', elm, data, function () {
-	            if (!data.length) return { display: 'none' };
-	            var r = this._getRadius();
-	            var max = 15;
-	            var shift = r > max ? '-1em' : '-2em';
-	            var color = this.options.tooltipColor || this.options.color || 'gray';
-	            var textColor = this.options.tooltipTextColor || this.options.color || 'black';
-	            var bgColor = this.options.tooltipBgColor || 'white';
-	            return {
-	                display: 'block',
-	                position: 'absolute',
-	                backgroundColor: bgColor,
-	                top: shift,
-	                left: '100%',
-	                padding: '0.1em 0.5em',
-	                border: '1px solid ' + color,
-	                color: textColor,
-	                borderRadius: '0.5em',
-	                borderBottomLeftRadius: '0'
-	            };
-	        });
-	    },
-
-	    _getTrackerStyle: function _getTrackerStyle(elm, data) {
-	        return this._getStyle('trackerStyle', elm, data, function () {
-	            var r = this._getRadius();
-	            var d = r * 2;
-	            var border = this.options.trackerBorder || this.options.border;
-	            if (!border) {
-	                var color = this.options.trackerColor || this.options.color || 'rgba(255, 255, 255, .5)';
-	                var borderWidth = this.options.trackerWidth || this.options.width || 3;
-	                border = borderWidth + 'px solid ' + color;
-	            }
-	            return {
-	                display: 'block',
-	                border: border,
-	                borderRadius: d + 'px',
-	                height: d + 'px',
-	                width: d + 'px',
-	                background: 'none',
-	                marginLeft: -r + 'px',
-	                marginTop: -r + 'px'
-	            };
-	        });
-	    },
-
-	    _getStyle: function _getStyle(key, elm, data, f) {
-	        var val = this.options[key] || f;
-	        if (typeof val === 'function') {
-	            val = val.call(this, elm, data);
-	        }
-	        return val;
-	    },
-
-	    _initIcon: function _initIcon() {
-	        Marker.prototype._initIcon.apply(this, arguments);
-	        var pane = this._getPane();
-	        pane.appendChild(this._icon);
-	        this._icon.style.display = 'none';
+	        return this._radius(zoom);
 	    }
 
 	});
+
+	DataLayerTracker.throttle = Utils.throttle;
 	module.exports = DataLayerTracker;
 
 /***/ },
-/* 13 */
+/* 14 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -1891,43 +1806,15 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = newLayer;
 
 /***/ },
-/* 14 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var L = __webpack_require__(1);
-	var throttle = L.Util.throttle || function (f, time, context) {
-	    var timeoutId, that, args;
-	    return function () {
-	        that = context || this;
-	        args = [];
-	        for (var i = 0; i < arguments.length; i++) {
-	            args.push(arguments[i]);
-	        }
-	        if (timeoutId === undefined) {
-	            timeoutId = setTimeout(function () {
-	                timeoutId = undefined;
-	                return f.apply(that, args);
-	            }, time);
-	        }
-	    };
-	};
-
-	module.exports = {
-	    throttle: throttle
-	};
-
-/***/ },
 /* 15 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
 	var L = __webpack_require__(1);
-	var ParentType = __webpack_require__(13)(L.Layer || L.Class);
-	var Utils = __webpack_require__(14);
-	var GeoJsonUtils = __webpack_require__(8);
+	var ParentType = __webpack_require__(14)(L.Layer || L.Class);
+	var Utils = __webpack_require__(2);
+	var GeoJsonUtils = __webpack_require__(9);
 
 	var FocusLayer = ParentType.extend({
 
@@ -1989,7 +1876,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        });
 	        if (!this._notDefined(bbox) && !this._equal(bbox, this._bbox)) {
 	            if (this._isEmpty(bbox)) {
-	                this._map.setView(L.latLng(bbox[0][1], bbox[0][0]));
+	                this._map.panTo(L.latLng(bbox[0][1], bbox[0][0]));
 	            } else {
 	                var bounds = L.latLngBounds( //
 	                L.latLng(bbox[0][1], bbox[0][0]), //
@@ -2062,8 +1949,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	'use strict';
 
 	var rbush = __webpack_require__(18);
-	var GeoJsonUtils = __webpack_require__(8);
-	var GeometryUtils = __webpack_require__(5);
+	var GeoJsonUtils = __webpack_require__(9);
+	var GeometryUtils = __webpack_require__(6);
 
 	/**
 	 * A simple data provider synchronously indexing the given data using an RTree
@@ -2952,7 +2839,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	'use strict';
 
 	var GridIndex = __webpack_require__(19);
-	var extend = __webpack_require__(4);
+	var extend = __webpack_require__(5);
 
 	function ImageGridIndex() {
 	    GridIndex.apply(this, arguments);

@@ -250,25 +250,25 @@ var DataLayer = GridLayer.extend({
     // -----------------------------------------------------------------------
 
     _onZoomStart : function(ev) {
-        if (this._cleanupId) {
-            clearTimeout(this._cleanupId);
-            delete this._cleanupId;
-        }
+//        if (this._cleanupId) {
+//            clearTimeout(this._cleanupId);
+//            delete this._cleanupId;
+//        }
     },
     _onZoomEnd : function(ev) {
-        if (this._cleanupId) {
-            clearTimeout(this._cleanupId);
-            delete this._cleanupId;
-        }
-        this._cleanupId = setTimeout(function() {
-            var zoom = this._map.getZoom();
-            for ( var z in this._levels) {
-                if (+z !== zoom) {
-                    L.DomUtil.remove(this._levels[z].el);
-                    delete this._levels[z];
-                }
-            }
-        }.bind(this), 200);
+//        if (this._cleanupId) {
+//            clearTimeout(this._cleanupId);
+//            delete this._cleanupId;
+//        }
+//        this._cleanupId = setTimeout(function() {
+//            var zoom = this._map.getZoom();
+//            for ( var z in this._levels) {
+//                if (+z !== zoom) {
+//                    L.DomUtil.remove(this._levels[z].el);
+//                    delete this._levels[z];
+//                }
+//            }
+//        }.bind(this), 200);
     },
 
     _isTransparent : function(latlng) {
@@ -290,11 +290,11 @@ var DataLayer = GridLayer.extend({
     },
 
     _onClick : function(ev) {
-        if (!this._isTransparent(ev.latlng)) {
+//        if (!this._isTransparent(ev.latlng)) {
             ev.target = this;
             ev.map = this._map;
             this.fire('click', ev);
-        }
+//        }
     },
 
     // -----------------------------------------------------------------------
